@@ -1,0 +1,9 @@
+# mac
+.DS_Store
+
+# pycharm
+.idea/
+
+
+*.pyc
+.ipynb_checkpoints/
