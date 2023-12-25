@@ -90,5 +90,5 @@ class TrainDataset:
                 else:
                     text_bio.extend(span_bio)
 
-            full_bio.append(text_bio)
+            full_bio.extend(text_bio)
         return full_bio
