@@ -2,6 +2,7 @@ from itertools import chain
 
 import nltk
 import csv
+import json
 import tqdm
 import os
 from tqdm import tqdm
@@ -61,8 +62,8 @@ class CRF_model:
         """      
 
         word = sentence[i][1]
-            
-        postag = self.get_pos_tag(word)
+        # postag = self.get_pos_tag(word)
+        postag = sentence[i][2]
 
         features = {
             'bias': 1.0,
@@ -78,7 +79,8 @@ class CRF_model:
         
         if i > 0:
             word1 = sentence[i-1][1]
-            postag1 =  self.get_pos_tag(word1)
+            # postag1 =  self.get_pos_tag(word1)
+            postag1 = sentence[i-1][1]
             features.update({
                 '-1:word.lower()': word1.lower(),
                 '-1:word.istitle()': word1.istitle(),
@@ -91,7 +93,8 @@ class CRF_model:
 
         if i < len(sentence)-1:
             word1 = sentence[i+1][1]
-            postag1 = self.get_pos_tag(word1)
+            # postag1 = self.get_pos_tag(word1)
+            postag1 = sentence[i+1][1]
             features.update({
                 '+1:word.lower()': word1.lower(),
                 '+1:word.istitle()': word1.istitle(),
@@ -151,11 +154,8 @@ class CRF_model:
                 aspect['start'] = sentence[start][-2]
         return aspects
  
-    def extract_position(self, initial_test: list) -> list:
+    def extract_position(self) -> list:
         """Exctract start and end positions from raw text for each aspect (not token-, but character-wise)
-
-        Args:
-            initial_test (list): list of lists of a type -- [text_id, raw_text]
 
         Returns:
             list: in a format of test set (without sentimenr)
@@ -173,7 +173,8 @@ class CRF_model:
                 results.append([aspect['text_id'], aspect['aspect'], aspect['string'], start, end])
             
         pickle.dump(results, open('./aspects_pred.pkl', 'wb'))
-        with open('./aspects_pred.txt', 'w', newline='') as file:
+
+        with open('./aspects_pred.tsv', 'w', newline='') as file:
             writer = csv.writer(file, delimiter='\t')
             writer.writerows(results)
 
@@ -201,7 +202,7 @@ class CRF_model:
             list: list of sentences in BIO-tags
         """        
         # print(sentence[0][2].split('-')[0] )
-        return [word[2] for word in sentence]   
+        return [word[3] for word in sentence]   
     
     def fit(self, train_data: list) -> None:
 
@@ -217,7 +218,7 @@ class CRF_model:
             all_possible_transitions=True
         )
         self.crf_class.fit(self.X_train_features, self.y_train_labels)
-        pickle.dump(self.crf_class, open('./crf_weights.sav', 'wb'))
+        pickle.dump(self.crf_class, open('./crf_weights_ud+positions.sav', 'wb'))
         self.labels = list(self.crf_class.classes_)
         # self.labels.remove('O')  
         # print(self.labels)
@@ -233,7 +234,7 @@ class CRF_model:
         accuracy = metrics.flat_accuracy_score(y_test_labels, y_eval)
         return f1, accuracy
         
-    def predict_label(self, test_data:list, initial_test:list) -> list:
+    def predict_label(self, test_data:list) -> list:
         """Makes predictions and reformats them.
 
         Args:
@@ -259,20 +260,19 @@ class CRF_model:
             
         self.y_pred = classifier.predict(X_test_features)
 
-        return self.extract_position(initial_test)
+        return self.extract_position()
 
 
 if __name__ == '__main__':
-        train_set = pickle.load(open('./bio_corpus_train.pkl', 'rb'))
-        eval_set = pickle.load(open('./bio_corpus_dev.pkl', 'rb'))
-        test_set = pickle.load(open('./bio_corpus_dev.pkl', 'rb'))
-        initial_test = pickle.load(open('./dev_id_text.pkl', 'rb'))
+        train_set = json.load(open('./data/bio_train.json', 'rb'))
+        eval_set = json.load(open('./data/bio_dev.json', 'rb'))
+        test_set = json.load(open('./data/bio_dev.json', 'rb'))
         
         path_to_weights = './crf_weights.sav'
         
         crf = CRF_model('lbfgs', path_to_weights=path_to_weights)
         crf.fit(train_set)
         f1_eval, acc_eval = crf.evaluate(eval_set)
-        resultsiks = crf.predict_label(test_set, initial_test)
+        resultsiks = crf.predict_label(test_set)
 
         print(f'F-score on evaluation set: {f1_eval, acc_eval}')
