@@ -92,3 +92,42 @@ class TrainDataset:
 
             full_bio.extend(text_bio)
         return full_bio
+
+    def convert_to_bio_df(self,
+                          tokenizer: Callable[[str, bool], Iterable[Iterable[Tuple[str, str, int, int]]]],
+                          split_sents: bool = True) -> pd.DataFrame:
+
+        bio = []
+        for _, text in self.reviews.iterrows():
+            tokenized = tokenizer(text.text, split_sents)
+            text_aspects = self.aspects[self.aspects.text_id == text.text_id].reset_index()
+
+            aspect_idx = 0
+            prev_is_ent = False  # whether the previous token is an entity or not
+
+            for span_idx, span in enumerate(tokenized):
+                for token in span:
+                    if aspect_idx <= text_aspects.index[-1] and \
+                            token[2] >= text_aspects.loc[aspect_idx, 'start'] and \
+                            token[3] <= text_aspects.loc[aspect_idx, 'end']:
+                        bio_tag = 'B' if not prev_is_ent else 'I'
+                        bio_tag = bio_tag + '-' + text_aspects.loc[aspect_idx, 'category']
+                        prev_is_ent = True
+                    else:
+                        bio_tag = 'O'
+                        if prev_is_ent:
+                            aspect_idx += 1
+                        prev_is_ent = False
+
+                    bio.append((
+                        text.text_id,
+                        span_idx,
+                        token[0],
+                        token[1],
+                        bio_tag,
+                        token[2],
+                        token[3]
+                    ))
+
+        bio = pd.DataFrame(bio, columns=['text_id', 'sent_id', 'token', 'POS', 'BIO', 'char_start', 'char_end'])
+        return bio
