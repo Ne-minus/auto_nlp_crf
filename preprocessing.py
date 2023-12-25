@@ -41,7 +41,7 @@ class TrainDataset:
         self.aspects = pd.read_csv(aspect_file, sep='\t', header=None, index_col=None,
                                    names=['text_id', 'category', 'aspect', 'start', 'end', 'sentiment'])
 
-    def edik077(self,
+    def convert_to_bio(self,
                        tokenizer: Callable[[str, bool], Iterable[Iterable[Tuple[str, str, int, int]]]],
                        split_sents: bool = True):
         """
@@ -61,7 +61,7 @@ class TrainDataset:
             text_bio = []
             prev_is_ent = False  # whether the previous token is an entity or not
 
-            for span in tokenized:
+            for span_idx, span in enumerate(tokenized):
                 span_bio = []
 
                 for token in span:
@@ -78,6 +78,7 @@ class TrainDataset:
                         prev_is_ent = False
 
                     span_bio.append((
+                        (text.text_id, span_idx),
                         token[0],
                         token[1],
                         bio_tag,
