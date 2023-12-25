@@ -1,6 +1,7 @@
 from itertools import chain
 
 import nltk
+import csv
 import tqdm
 import os
 from tqdm import tqdm
@@ -15,6 +16,9 @@ import sklearn_crfsuite
 from sklearn_crfsuite import scorers
 from sklearn_crfsuite import metrics
 
+nltk.download('averaged_perceptron_tagger_ru')
+# nltk.download('universal_tagset')
+
 
 
 class CRF_model:
@@ -22,17 +26,40 @@ class CRF_model:
         self.algo = algorithm
         if path_to_weights:
             self.path = path_to_weights
-        else:
-            self.path = ''
+            self.precomp_classifier = pickle.load(open(self.path, 'rb'))
+        # else:
+        #     self.path = ''
+
+        # self.precomp_classifier = pickle.load(open(self.path, 'rb'))
      
-    def get_pos_tag(self, word):
+    def get_pos_tag(self, word: str) -> str:
+        """Generates pos tag if exists.
+
+        Args:
+            word (str): word itself
+        Returns:
+            str: UD pos tag or empty
+        """        
+        
         try:
-            tag = nltk.pos_tag([word])[0][1]
-        except:
+            tag = nltk.pos_tag([word], lang='rus')[0][1]
+            # print(tag)
+        except Exception as e:
             tag = ''
+            # print(tag)
         return tag
     
-    def get_word_features(self, sentence, i):
+    def get_word_features(self, sentence: list, i: int) -> dict:
+        """Extracts features of a word and its neighbours.
+
+        Args:
+            sentence (list): includes text_id, sentence_id, word, BIO-tag, start, end
+            i (int): word id
+
+        Returns:
+            dict: ditctionary of features for a given word
+        """      
+
         word = sentence[i][1]
             
         postag = self.get_pos_tag(word)
@@ -77,19 +104,39 @@ class CRF_model:
 
         return features      
         
-    def extract_aspects(self, label):
+    def extract_aspects(self, label: list) -> list:
+        """Extracts B- and I- tags and their positions in a sentence.
+
+        Args:
+            label (list): sentence in BIO-tagging
+
+        Returns:
+            list: list of dictionaries, one dictionary for each aspect with their position in a sentence
+        """        
+
         aspects = []
         current_aspect = None
         for idx, label in enumerate(label):
             if label.startswith('B-'):
                 current_aspect = label[2:]
+                # print(current_aspect)
                 aspects.append({'aspect': current_aspect, 'start': idx, 'end': idx})
             elif label.startswith('I-') and current_aspect:
                 if aspects and current_aspect == aspects[-1]['aspect']:
                     aspects[-1]['end'] = idx
         return aspects   
 
-    def find_aspect_positions(self, sentence, aspects):
+    def find_aspect_positions(self, sentence: list, aspects: list) -> list:
+        """Maps BIO-tagged sentence with an aactual test set.
+
+        Args:
+            sentence (list): sentence from processed test set (similar to in line 47)
+            aspects (list): extracted from extract_aspects
+
+        Returns:
+            list: list of dictionaries, one dictionary for each aspect
+        """
+
         for aspect in aspects:
             start = aspect['start']
             end = aspect['end']
@@ -101,30 +148,63 @@ class CRF_model:
                 aspect['string'] = ' '.join(asp_string)
                 aspect['text_id'] = text_id[0]
                 aspect['sent_id'] = sent_id[0]
+                aspect['start'] = sentence[start][-2]
         return aspects
  
-    def extract_position(self, initial_test):
+    def extract_position(self, initial_test: list) -> list:
+        """Exctract start and end positions from raw text for each aspect (not token-, but character-wise)
+
+        Args:
+            initial_test (list): list of lists of a type -- [text_id, raw_text]
+
+        Returns:
+            list: in a format of test set (without sentimenr)
+        """        
+
         results = []
         for id in range(len(self.y_pred)):
             aspects = self.extract_aspects(self.y_pred[id])
             aspects = self.find_aspect_positions(self.test_data[id], aspects)
             
             for aspect in aspects:
-                text = initial_test[str(aspect['text_id'])]
-                start = text.find(aspect['string'])                
+                # text = initial_test[str(aspect['text_id'])]
+                start = aspect['start']           
                 end = start+len(aspect['string'])
                 results.append([aspect['text_id'], aspect['aspect'], aspect['string'], start, end])
             
-        pickle.dump(results, open('./aspects.pkl', 'wb'))
+        pickle.dump(results, open('./aspects_pred.pkl', 'wb'))
+        with open('./aspects_pred.txt', 'w', newline='') as file:
+            writer = csv.writer(file, delimiter='\t')
+            writer.writerows(results)
+
         return results
     
-    def get_X_features(self, sentence):
+    def get_X_features(self, sentence: list) -> list:
+        """Refromats data for training.
+
+        Args:
+            sentence (list): sentence from a test set
+
+        Returns:
+            list: list of dicts with features
+        """        
+
         return [self.get_word_features(sentence, word) for word in range(len(sentence))]
     
-    def get_y_labels(self, sentence):
+    def get_y_labels(self, sentence: list) -> list:
+        """Reformats dats for testing.
+
+        Args:
+            sentence (list): sentence from a test set
+
+        Returns:
+            list: list of sentences in BIO-tags
+        """        
+        # print(sentence[0][2].split('-')[0] )
         return [word[2] for word in sentence]   
     
-    def fit(self, train_data):
+    def fit(self, train_data: list) -> None:
+
         print('Reprocessing your train data...')
         self.X_train_features = [self.get_X_features(s) for s in tqdm(train_data, position=0, leave=True)]
         self.y_train_labels = [self.get_y_labels(s) for s in tqdm(train_data, position=0, leave=True)]
@@ -132,24 +212,37 @@ class CRF_model:
         self.crf_class = sklearn_crfsuite.CRF(
             algorithm=self.algo,
             max_iterations=100,
-            c1=0.1,
-            c2=0.1,
+            c1=0.3,
+            c2=0.2,
             all_possible_transitions=True
         )
         self.crf_class.fit(self.X_train_features, self.y_train_labels)
         pickle.dump(self.crf_class, open('./crf_weights.sav', 'wb'))
-        self.labels = list(self.crf_class.classes_).remove('O')  
+        self.labels = list(self.crf_class.classes_)
+        # self.labels.remove('O')  
+        # print(self.labels)
         
-    def evaluate(self, eval_data):
+    def evaluate(self, eval_data: list) -> float:
         print('Reprocessing your eval data...')
         X_test_features = [self.get_X_features(s) for s in tqdm(eval_data, position=0, leave=True)]
         y_test_labels = [self.get_y_labels(s) for s in tqdm(eval_data, position=0, leave=True)]
-        y_eval = self.crf_class.predict(X_test_features)
-        f1 = metrics.flat_f1_score(y_test_labels, self.y_pred,
+        y_eval = self.precomp_classifier.predict(X_test_features)
+
+        f1 = metrics.flat_f1_score(y_test_labels, y_eval,
                               average='weighted', labels=self.labels)
-        return f1
+        accuracy = metrics.flat_accuracy_score(y_test_labels, y_eval)
+        return f1, accuracy
         
-    def predict_label(self, test_data, initial_test):
+    def predict_label(self, test_data:list, initial_test:list) -> list:
+        """Makes predictions and reformats them.
+
+        Args:
+            test_data (list): test set
+            initial_test (list): list of raw texts of a type -- [text_id, raw_text]
+
+        Returns:
+            list: predictions
+        """
         print('Reprocessing your test data...')
         self.test_data = test_data
         X_test_features = [self.get_X_features(s) for s in tqdm(self.test_data, position=0, leave=True)]
@@ -157,7 +250,7 @@ class CRF_model:
         
         try:
             if os.path.exists(self.path) and self.path != '':
-                classifier = pickle.load(open(self.path, 'rb'))
+                classifier = self.precomp_classifier
             else:
                 classifier = self.crf_class
         except Exception as e:
@@ -178,6 +271,8 @@ if __name__ == '__main__':
         path_to_weights = './crf_weights.sav'
         
         crf = CRF_model('lbfgs', path_to_weights=path_to_weights)
+        crf.fit(train_set)
+        f1_eval, acc_eval = crf.evaluate(eval_set)
         resultsiks = crf.predict_label(test_set, initial_test)
 
-        print(resultsiks[0:3])
+        print(f'F-score on evaluation set: {f1_eval, acc_eval}')
