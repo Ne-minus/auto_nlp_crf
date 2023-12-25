@@ -1,0 +1,4 @@
+ru-core-news-sm @ https://github.com/explosion/spacy-models/releases/download/ru_core_news_sm-3.5.0/ru_core_news_sm-3.5.0-py3-none-any.whl
+tqdm>=4.66.1
+pandas>=2.1.4
+spacy>=3.7.2
