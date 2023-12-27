@@ -1,0 +1,45 @@
+dataset:
+  train:
+    reviews: './data/reviews_train.csv'
+    aspects: './data/aspects_train.csv'
+    categories: './data/categories_train.csv'
+    bio: './data/bio_train.csv'
+  dev:
+    reviews: './data/reviews_dev.csv'
+    aspects: './data/aspects_dev.csv'
+    categories: './data/categories_dev.csv'
+    parsed: './data/parsed_dev.csv'
+    bio: './data/bio_dev.csv'
+  test:
+    reviews: './data/reviews_dev.csv'
+    parsed: './data/parsed_dev.csv'
+
+components:
+  crf:
+    class_name: CRFModel
+    default_params:
+      algorithm: 'lbfgs'
+      max_iterations: 100
+      all_possible_transitions: True
+      c1: 0.3
+      c2: 0.2
+  bert_ats:
+    class_name: BERTSentiment
+    default_params:
+      model_name: "MonoHime/rubert-base-cased-sentiment-new"
+  bert_acs:
+    class_name: BERTSentiment
+    default_params:
+      model_name: "MonoHime/rubert-base-cased-sentiment-new"
+
+checkpoints:
+  crf:
+    path: './checkpoints/crf_weights.sav'
+
+pipelines:
+  atc+ats+acs:
+    pipeliine_class: ThreeShotPipeline
+    components:
+      - crf
+      - bert_ats
+      - bert_acs

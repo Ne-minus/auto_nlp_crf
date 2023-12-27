@@ -1,8 +1,13 @@
 import os
 from typing import Callable, Union, Iterable, Tuple
+from pathlib import Path
 
 import pandas as pd
+import spacy
 from spacy import Language
+
+
+nlp = spacy.load("ru_core_news_sm")
 
 
 def split_data(data: pd.DataFrame, train_idx, test_idx, split_col: str = 'text_id') -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -31,103 +36,101 @@ class SpacyTokenizer:
         return tokenized
 
 
-class TrainDataset:
+class ABSADataset:
+
+    spacy_tokenizer = SpacyTokenizer(nlp)
 
     def __init__(self,
-                 reviews_file: Union[str, os.PathLike],
-                 aspect_file: Union[str, os.PathLike]):
+                 dataset_configs: dict,
+                 part: str = 'train',
+                 save_data: Union[str, os.PathLike] = None):
 
-        self.reviews = pd.read_csv(reviews_file, sep='\t', header=None, index_col=None, names=['text_id', 'text'])
-        self.aspects = pd.read_csv(aspect_file, sep='\t', header=None, index_col=None,
-                                   names=['text_id', 'category', 'aspect', 'start', 'end', 'sentiment'])
+        self.dataset_configs = dataset_configs[part]
+        self.part = part
+        self.save_data = save_data
 
-    def convert_to_bio(self,
-                       tokenizer: Callable[[str, bool], Iterable[Iterable[Tuple[str, str, int, int]]]],
-                       split_sents: bool = True):
-        """
-        Converts original datasets to BIO annotation Args: tokenizer: tokenizer that takes text string and
-        split_sents param and returns [[(token, pos, char_start, char_end]]
-        split_sents: whether to split texts into sentence or not
+        self.reviews = pd.read_csv(self.dataset_configs['reviews'],
+                                   sep='\t', header=None, index_col=None, names=['text_id', 'text'])
 
-        Returns: [[(token, pos, bio-tag, char_start, char_end)]]
-        """
+        if part == 'train' or part == 'dev':
+            self.aspects = pd.read_csv(self.dataset_configs['aspects'], sep='\t', header=None, index_col=None,
+                                       names=['text_id', 'category', 'aspect', 'start', 'end', 'sentiment'])
+            self.categories = pd.read_csv(self.dataset_configs['categories'], sep='\t', header=None, index_col=None,
+                                          names=['text_id', 'category', 'sentiment'])
 
-        full_bio = []
+    def parse_reviews(self):
+        parsed = []
         for _, text in self.reviews.iterrows():
-            tokenized = tokenizer(text.text, split_sents)
-            text_aspects = self.aspects[self.aspects.text_id == text.text_id].reset_index()
+            tokenized = ABSADataset.spacy_tokenizer(text.text, True)
+            for sent_id, sent in enumerate(tokenized):
+                for token in sent:
+                    parsed.append((
+                        text.text_id,
+                        sent_id,
+                        *token,
+                    ))
+        parsed = pd.DataFrame(parsed, columns=['text_id', 'sent_id', 'token', 'POS', 'char_start', 'char_end'])
 
-            aspect_idx = 0
-            text_bio = []
-            prev_is_ent = False  # whether the previous token is an entity or not
+        if self.save_data:
+            parsed.to_csv(Path(self.save_data, f'parsed_{self.part}.csv').resolve(),
+                          sep='\t', header=True, index=False)
+        return parsed
 
-            for span_idx, span in enumerate(tokenized):
-                span_bio = []
-
-                for token in span:
-                    if aspect_idx <= text_aspects.index[-1] and \
-                            token[2] >= text_aspects.loc[aspect_idx, 'start'] and \
-                            token[3] <= text_aspects.loc[aspect_idx, 'end']:
-                        bio_tag = 'B' if not prev_is_ent else 'I'
-                        bio_tag = bio_tag + '-' + text_aspects.loc[aspect_idx, 'category']
-                        prev_is_ent = True
-                    else:
-                        bio_tag = 'O'
-                        if prev_is_ent:
-                            aspect_idx += 1
-                        prev_is_ent = False
-
-                    span_bio.append((
-                        (text.text_id, span_idx),
-                        token[0],
-                        token[1],
-                        bio_tag,
-                        token[2],
-                        token[3]))
-
-                if split_sents:
-                    text_bio.append(span_bio)
-                else:
-                    text_bio.extend(span_bio)
-
-            full_bio.extend(text_bio)
-        return full_bio
-
-    def convert_to_bio_df(self,
-                          tokenizer: Callable[[str, bool], Iterable[Iterable[Tuple[str, str, int, int]]]],
-                          split_sents: bool = True) -> pd.DataFrame:
+    def to_crf_bio(self,
+                   parsed: pd.DataFrame):
+        if not isinstance(self.aspects, pd.DataFrame):
+            raise AttributeError('To convert to BIO you should init with aspect_file')
 
         bio = []
-        for _, text in self.reviews.iterrows():
-            tokenized = tokenizer(text.text, split_sents)
-            text_aspects = self.aspects[self.aspects.text_id == text.text_id].reset_index()
+        token_idx = []
+        for text_id, token_ids in parsed.groupby(by='text_id').groups.items():
+            text_aspects = self.aspects[self.aspects.text_id == text_id].reset_index()
 
             aspect_idx = 0
             prev_is_ent = False  # whether the previous token is an entity or not
+            for i in token_ids:
+                token = parsed.loc[i]
 
-            for span_idx, span in enumerate(tokenized):
-                for token in span:
-                    if aspect_idx <= text_aspects.index[-1] and \
-                            token[2] >= text_aspects.loc[aspect_idx, 'start'] and \
-                            token[3] <= text_aspects.loc[aspect_idx, 'end']:
-                        bio_tag = 'B' if not prev_is_ent else 'I'
-                        bio_tag = bio_tag + '-' + text_aspects.loc[aspect_idx, 'category']
-                        prev_is_ent = True
-                    else:
-                        bio_tag = 'O'
-                        if prev_is_ent:
-                            aspect_idx += 1
-                        prev_is_ent = False
+                if aspect_idx <= text_aspects.index[-1] and \
+                        token.char_start >= text_aspects.loc[aspect_idx, 'start'] and \
+                        token.char_end <= text_aspects.loc[aspect_idx, 'end']:
+                    bio_tag = 'B' if not prev_is_ent else 'I'
+                    bio_tag = bio_tag + '-' + text_aspects.loc[aspect_idx, 'category']
+                    prev_is_ent = True
+                else:
+                    bio_tag = 'O'
+                    if prev_is_ent:
+                        aspect_idx += 1
+                    prev_is_ent = False
+                bio.append(bio_tag)
+                token_idx.append(i)
 
-                    bio.append((
-                        text.text_id,
-                        span_idx,
-                        token[0],
-                        token[1],
-                        bio_tag,
-                        token[2],
-                        token[3]
-                    ))
+        parsed['BIO'] = pd.Series(bio, token_idx)
 
-        bio = pd.DataFrame(bio, columns=['text_id', 'sent_id', 'token', 'POS', 'BIO', 'char_start', 'char_end'])
-        return bio
+        if self.save_data:
+            parsed.to_csv(Path(self.save_data, f'bio_{self.part}.csv').resolve(),
+                          sep='\t', header=True, index=False)
+        return parsed
+
+
+if __name__ == '__main__':
+    import yaml
+    with open('configs.yml', 'r') as file:
+        config = yaml.safe_load(file)
+
+    part = input('Dataset part (train, dev): ')
+
+    dataset = ABSADataset(config['dataset'], part)
+
+    parsed = dataset.parse_reviews()
+    save_parsed = input('Save parsed dataset? y/n: ')
+    if save_parsed == 'y':
+        parsed.to_csv(f'./data/parsed_{part}.csv', sep='\t', header=True, index=False)
+
+    bio = dataset.to_crf_bio(parsed)
+    save_bio = input('Save bio annotation? y/n: ')
+    if save_bio == 'y':
+        bio.to_csv(f'./data/bio_{part}.csv', sep='\t', header=True, index=False)
+
+
+
