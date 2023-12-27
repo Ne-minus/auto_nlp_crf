@@ -1,4 +1,5 @@
 import os
+from collections import Counter
 from typing import Callable, Union, Iterable, Tuple
 from pathlib import Path
 
@@ -112,6 +113,34 @@ class ABSADataset:
                           sep='\t', header=True, index=False)
         return parsed
 
+    def bio2aspects(self, bio_annot: pd.DataFrame):
+        aspects = []
+        aspect_tokens = []
+        for idx, token in bio_annot.iterrows():
+            token_bio = token['BIO'].split('-')
+            if token_bio[0] == 'B':
+                if aspect_tokens:
+                    aspects.append((
+                        ' '.join([t['token'] for t in aspect_tokens]),
+                        Counter([t['BIO'].split('-')[1] for t in aspect_tokens]).most_common(1)[0][0],
+                        aspect_tokens[0]['char_start'],
+                        aspect_tokens[-1]['char_end'],
+                        *token.values.tolist()
+                    ))
+                aspect_tokens = [token]
+            elif token_bio[0] == 'I':
+                aspect_tokens.append(token)
+            elif token_bio[0] == 'O' and aspect_tokens:
+                aspects.append((
+                    ' '.join([t['token'] for t in aspect_tokens]),
+                    Counter([t['BIO'].split('-')[1] for t in aspect_tokens]).most_common(1)[0][0],
+                    aspect_tokens[0]['char_start'],
+                    aspect_tokens[-1]['char_end'],
+                    *token.values.tolist()))
+                aspect_tokens = []
+        aspects = pd.DataFrame(aspects, columns=['aspect', 'category', 'aspect_start', 'aspect_end', *bio_annot.columns])
+        aspects = aspects.drop(['BIO', 'char_start', 'char_end', 'token', 'POS'], axis=1)
+        return aspects
 
 if __name__ == '__main__':
     import yaml
@@ -122,15 +151,19 @@ if __name__ == '__main__':
 
     dataset = ABSADataset(config['dataset'], part)
 
-    parsed = dataset.parse_reviews()
-    save_parsed = input('Save parsed dataset? y/n: ')
-    if save_parsed == 'y':
-        parsed.to_csv(f'./data/parsed_{part}.csv', sep='\t', header=True, index=False)
+    # parsed = dataset.parse_reviews()
+    # save_parsed = input('Save parsed dataset? y/n: ')
+    # if save_parsed == 'y':
+    #     parsed.to_csv(f'./data/parsed_{part}.csv', sep='\t', header=True, index=False)
+    #
+    # bio = dataset.to_crf_bio(parsed)
+    # save_bio = input('Save bio annotation? y/n: ')
+    # if save_bio == 'y':
+    #     bio.to_csv(f'./data/bio_{part}.csv', sep='\t', header=True, index=False)
 
-    bio = dataset.to_crf_bio(parsed)
-    save_bio = input('Save bio annotation? y/n: ')
-    if save_bio == 'y':
-        bio.to_csv(f'./data/bio_{part}.csv', sep='\t', header=True, index=False)
+    bio = pd.read_csv(config['dataset'][part]['bio'], sep='\t', header=0)
+    res = dataset.bio2aspects(bio)
+    print(res.head(30))
 
 
 
