@@ -1,5 +1,6 @@
 import os
 import pickle
+import csv
 from typing import Union, Iterable, Tuple, List
 
 from tqdm import tqdm
@@ -95,79 +96,28 @@ class CRFModel(ATCDetection):
             features['EOS'] = True
         return features
 
+    def extract_info(self, text_id, bios, tokens, starts, ends):
+        lists = []
 
-    def extract_aspects(self, label: list) -> list:
-        """Extracts B- and I- tags and their positions in a sentence.
+        for id, tag in enumerate(bios):
+            if tag.startswith('B-') or (tag.startswith('I-') and bios[id-1] == 'O'):
+                holder = {}
+                holder['text_id'] = text_id
+                holder['aspect'] = tag[2:]
+                holder['token'] = tokens[id]
+                holder['start'] = starts[id]
+                holder['end'] = ends[id]
 
-        Args:
-            label (list): sentence in BIO-tagging
+                lists.append(holder)
+            elif tag.startswith('I-'):
+                if tokens[id] in ',./-:!?':
+                    lists[-1]['token'] += tokens[id]
+                else:
+                    lists[-1]['token'] += f' {tokens[id]}'
+                lists[-1]['end'] = ends[id]
+                
+        return [lst for lst in lists if lst]
 
-        Returns:
-            list: list of dictionaries, one dictionary for each aspect with their position in a sentence
-        """
-
-        aspects = []
-        current_aspect = None
-        for idx, label in enumerate(label):
-            if label.startswith('B-'):
-                current_aspect = label[2:]
-                # print(current_aspect)
-                aspects.append({'aspect': current_aspect, 'start': idx, 'end': idx})
-            elif label.startswith('I-') and current_aspect:
-                if aspects and current_aspect == aspects[-1]['aspect']:
-                    aspects[-1]['end'] = idx
-        return aspects
-
-    def find_aspect_positions(self, sentence: list, aspects: list) -> list:
-        """Maps BIO-tagged sentence with an aactual test set.
-
-        Args:
-            sentence (list): sentence from processed test set (similar to in line 47)
-            aspects (list): extracted from extract_aspects
-
-        Returns:
-            list: list of dictionaries, one dictionary for each aspect
-        """
-
-        for aspect in aspects:
-            start = aspect['start']
-            end = aspect['end']
-            if start is not None and end is not None:
-                tuples = sentence[start:end + 1]
-                asp_string = [i[1] for i in tuples]
-                text_id = [i[0][0] for i in tuples]
-                sent_id = [i[0][1] for i in tuples]
-                aspect['string'] = ' '.join(asp_string)
-                aspect['text_id'] = text_id[0]
-                aspect['sent_id'] = sent_id[0]
-                aspect['start'] = sentence[start][-2]
-        return aspects
-
-    def extract_position(self) -> list:
-        """Exctract start and end positions from raw text for each aspect (not token-, but character-wise)
-
-        Returns:
-            list: in a format of test set (without sentimenr)
-        """
-
-        results = []
-        for id in range(len(self.y_pred)):
-            aspects = self.extract_aspects(self.y_pred[id])
-            aspects = self.find_aspect_positions(self.test_data[id], aspects)
-
-            for aspect in aspects:
-                # text = initial_test[str(aspect['text_id'])]
-                start = aspect['start']
-                end = start + len(aspect['string'])
-                results.append([aspect['text_id'], aspect['aspect'], aspect['string'], start, end])
-
-        # pickle.dump(results, open('./aspects_pred.pkl', 'wb'))
-        #
-        # with open('./aspects_pred.tsv', 'w', newline='') as file:
-        #     writer = csv.writer(file, delimiter='\t')
-        #     writer.writerows(results)
-
-        return results
 
     def get_X_features(self,
                        sentence: List[Tuple[str, str]]) -> List[dict]:
@@ -182,18 +132,6 @@ class CRFModel(ATCDetection):
           of a word in the input sentence.
         """
         return [self.get_word_features(sentence, word) for word in range(len(sentence))]
-
-    # def get_y_labels(self,
-    #                  sentence: Iterable[str]) -> list:
-    #     """Reformats dats for testing.
-    #
-    #     Args:
-    #         sentence (list): sentence tokens bio tags
-    #
-    #     Returns:
-    #         list: list of sentences in BIO-tags
-    #     """
-    #     return [tag for tag in sentence]
 
     def construct_features(self,
                            X_dataset: pd.DataFrame,
@@ -270,39 +208,30 @@ class CRFModel(ATCDetection):
         accuracy = metrics.flat_accuracy_score(y_test_labels, y_eval)
         return f1, accuracy
 
-    def predict_label(self, test_data: ABSADataset) -> list:
-        """Makes predictions and reformats them.
-
-        Args:
-            test_data (list): test set
-            initial_test (list): list of raw texts of a type -- [text_id, raw_text]
-
-        Returns:
-            list: predictions
-        """
+    def predict(self,
+                test_data: ABSADataset):
         print('Reprocessing your test data...')
         parsed_test_data = self._to_parsed(test_data)
-        print(parsed_test_data.head())
-        # self.test_data = test_data
-        # X_test_features = [self.get_X_features(s) for s in tqdm(self.test_data, position=0, leave=True)]
-        # # y_test_labels = [self.get_y_labels(s) for s in tqdm(self.test_data, position=0, leave=True)]
-        #
-        # try:
-        #     if os.path.exists(self.path) and self.path != '':
-        #         classifier = self.precomp_classifier
-        #     else:
-        #         classifier = self.crf_class
-        # except Exception as e:
-        #     print(e)
-        #     print('You need to provide path to models\' weights or train the model with crf.fit')
-        #
-        # self.y_pred = classifier.predict(X_test_features)
-        #
-        # return self.extract_position()
 
-    def predict(self,
-                tokenized_test_dataset: pd.DataFrame):
-        ...
+        featured_test_data, _ = self.construct_features(parsed_test_data, train=False)
+        preds = self.crf_class.predict(featured_test_data)
+
+        parsed_test_data = parsed_test_data.groupby(by=['text_id', 'sent_id']).agg(list)
+        parsed_test_data['predictions'] = preds
+        parsed_test_data.reset_index(level='text_id', inplace=True)
+
+        parsed_test_data['results'] = parsed_test_data.apply(lambda x: self.extract_info(x.text_id, x.predictions, x.token, x.char_start, x.char_end), axis=1)
+
+        results = list(parsed_test_data['results'])
+
+        final = []
+        for sent in results:
+            if sent:
+                final.extend(sent)
+
+        pd.DataFrame(final).to_csv('aspects_predicted.tsv', header=False, index=False, sep='\t')
+
+        return pd.DataFrame(final)
 
 
 if __name__ == '__main__':
@@ -332,12 +261,8 @@ if __name__ == '__main__':
 
     else:
         # prediction
-        pretrained = config['checkpoints']['crf']['default']['path']
+        pretrained = config['checkpoints']['crf']['path']
         crf = crf_model_class.from_pretrained(pretrained)
 
         test_dataset = ABSADataset(config['dataset'], 'test')
-        crf.predict_label(test_dataset)
-
-
-
-
+        crf.predict(test_dataset)

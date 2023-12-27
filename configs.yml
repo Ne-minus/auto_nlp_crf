@@ -34,7 +34,7 @@ components:
 
 checkpoints:
   crf:
-    path: './checkpoints/crf_weights.sav'
+    path: './checkpoints/crf_weights_ud+positions.sav'
 
 pipelines:
   atc+ats+acs:
