@@ -15,30 +15,32 @@ TRUE_ASPECTS = ['text_id', 'aspect', 'category', 'start', 'end', 'sentiment']
 TRUE_REVIEWS = ['text_id', 'text']
 TRUE_CATEGORIES = ['text_id', 'category', 'sentiment']
 
-# TRUE_REVIEWS -> PARSED_REVIEWS
+# TRUE_REVIEWS -> PARSED_REVIEWS +
 PARSED_REVIEWS = ['text_id', 'sent_id', 'token', 'POS', 'start', 'end']
-# (PARSED_REVIEWS, TRUE_ASPECTS) -> PARSED_ASPECTS
-PARSED_ASPECTS = ['text_id', 'sent_id', 'aspect', 'category', 'start', 'end']
-# (PARSED_ASPECTS, TRUE_ASPECTS)
-PARSED_ASPECT_SENTIMENTS = ['text_id', 'sent_id', 'sent', 'aspect', 'category', 'start', 'end', 'sentiment']
+# TRUE_REVIEWS -> SENT_INFO  +
+SENT_INFO = ['text_id', 'sent_id', 'sent', 'start', 'end']
+# (SENT_INFO, TRUE_ASPECTS) -> PARSED_ASPECTS  +                               # optional
+PARSED_ASPECTS = ['text_id', 'sent_id', 'aspect', 'category', 'start', 'end', 'sentiment']
+# (SENT_INFO, PARSED_ASPECTS) -> ATS_FORMAT  +                               # optional   # new
+ATS_FORMAT = ['text_id', 'sent_id', 'aspect', 'category', 'start', 'end', 'sentiment', 'sent']
 
-# (PARSED_REVIEWS, PARSED_ASPECTS) -> BIO
+# (PARSED_REVIEWS, TRUE_ASPECTS) -> BIO +
 BIO = ['text_id', 'sent_id', 'token', 'POS', 'start', 'end', 'BIO']
 
 # (PARSED_REVIEWS, TRUE_CATEGORIES) -> TEXT_SENTIMENT
 TEXT_SENTIMENT = ['text_id', 'text', 'category', 'sentiment']
 
 # CRF
-# (PARSED_REVIEWS, PARSED_ASPECTS) -> BIO -> TRAIN
-# PARSED_REVIEWS -> PREDICT -> PARSED_ASPECTS
+# (PARSED_REVIEWS, TRUE_ASPECTS) -> BIO -> TRAIN
+# REVIEWS -> PARSED_REVIEWS -> predict -> PARSED_ASPECTS (without sentiment)
 
 # ATS
-# PARSED_ASPECT_SENTIMENTS -> TRAIN
-# PARSED_ASPECTS -> PREDICT -> PARSED_ASPECT_SENTIMENTS
+# ATS_FORMAT (with sentiment) -> TRAIN
+# (SENT_INFO, PARSED_ASPECTS (without sentiment)) -> ATS_FORMAT (without sentiment) -> PREDICT -> ATS_FORMAT (with sentiment)
 
 # ACS_ALGO
-# -> TRAIN
-# PARSED_ASPECT_SENTIMENTS -> PREDICT -> TRUE_CATEGORIES
+# ... -> TRAIN
+# PARSED_ASPECTS (with sentiment) -> PREDICT -> TRUE_CATEGORIES
 
 # ACS_BERT
 # (PARSED_REVIEWS, TRUE_CATEGORIES) -> TEXT_SENTIMENT -> TRAIN
@@ -96,10 +98,11 @@ class ABSADataset:
         self._load_preprocessed()
 
     def _load_preprocessed(self):
-        preprocessed = self.dataset_configs.get('preprocessed', [])
-        for data_type in preprocessed:
-            df = pd.read_csv(preprocessed[data_type], sep='\t', header=0)
-            setattr(self, data_type + '_', df)
+        preprocessed = self.dataset_configs.get('preprocessed', None)
+        if preprocessed:
+            for data_type in preprocessed:
+                df = pd.read_csv(preprocessed[data_type], sep='\t', header=0)
+                setattr(self, data_type + '_', df)
 
     def save_preprocessed(self,
                           data_path: Union[str, os.PathLike]):
@@ -116,10 +119,10 @@ class ABSADataset:
     def parsed_reviews(self):
         parsed_ = getattr(self, 'parsed_', None)
         if parsed_ is None:
-            return self._parse_reviews()
+            return self.parse_reviews()
         return parsed_
 
-    def _parse_reviews(self):
+    def parse_reviews(self):
         print('Parsing reviews...')
 
         parsed = []
@@ -132,9 +135,39 @@ class ABSADataset:
                         sent_id,
                         *token,
                     ))
-        parsed = pd.DataFrame(parsed, columns=['text_id', 'sent_id', 'token', 'POS', 'char_start', 'char_end'])
+        parsed = pd.DataFrame(parsed, columns=['text_id', 'sent_id', 'token', 'POS', 'start', 'end'])
         setattr(self, 'parsed_', parsed)
+        print('"parsed_" attribute created')
         return parsed
+
+    def sent_info(self):
+        sents_ = getattr(self, 'sents_', None)
+        if sents_ is None:
+            return self.group_sent_info()
+        return sents_
+
+    def group_sent_info(self):
+        print("Creating sentence info... ")
+        parsed = self.parsed_reviews()
+        sent_info = []
+        for text_id, sent_idx in parsed.groupby(['text_id']).groups.items():
+            text_info = parsed.loc[sent_idx]
+            text = self.reviews[self.reviews['text_id'] == text_id]['text'].tolist()[0]
+            for sent_id, token_idx in text_info.groupby(['sent_id']).groups.items():
+                sent_start = parsed.loc[token_idx[0], 'start']
+                sent_end = parsed.loc[token_idx[-1], 'end']
+                sent = text[sent_start: sent_end]
+                sent_info.append((
+                    text_id,
+                    sent_id,
+                    sent,
+                    sent_start,
+                    sent_end
+                ))
+        sent_info = pd.DataFrame(sent_info, columns=['text_id', 'sent_id', 'sent', 'start', 'end'])
+        setattr(self, 'sents_', sent_info)
+        print('"sents_" attribute created')
+        return sent_info
 
     def crf_bio(self):
         bio_ = getattr(self, 'bio_', None)
@@ -145,6 +178,7 @@ class ABSADataset:
 
     def _to_crf_bio(self,
                     parsed: pd.DataFrame):
+        # (PARSED_REVIEWS, PARSED_ASPECTS) -> BIO
         if not isinstance(self.aspects, pd.DataFrame):
             raise AttributeError('To convert to BIO you should init with aspect_file')
 
@@ -175,91 +209,137 @@ class ABSADataset:
 
         parsed['BIO'] = pd.Series(bio, token_idx)
         setattr(self, 'bio_', parsed)
+        print('"bio_ attribute created')
         return parsed
 
-    def bio2aspects(self, bio_annot: pd.DataFrame):
-        aspects = []
-        aspect_tokens = []
-        for idx, token in bio_annot.iterrows():
-            token_bio = token['BIO'].split('-')
-            if token_bio[0] == 'B':
-                if aspect_tokens:
-                    aspects.append((
-                        ' '.join([t['token'] for t in aspect_tokens]),
-                        Counter([t['BIO'].split('-')[1] for t in aspect_tokens]).most_common(1)[0][0],
-                        aspect_tokens[0]['char_start'],
-                        aspect_tokens[-1]['char_end'],
-                        *token.values.tolist()
-                    ))
-                aspect_tokens = [token]
-            elif token_bio[0] == 'I':
-                aspect_tokens.append(token)
-            elif token_bio[0] == 'O' and aspect_tokens:
-                aspects.append((
-                    ' '.join([t['token'] for t in aspect_tokens]),
-                    Counter([t['BIO'].split('-')[1] for t in aspect_tokens]).most_common(1)[0][0],
-                    aspect_tokens[0]['char_start'],
-                    aspect_tokens[-1]['char_end'],
-                    *token.values.tolist()))
-                aspect_tokens = []
-        aspects = pd.DataFrame(aspects, columns=['aspect', 'category', 'aspect_start', 'aspect_end', *bio_annot.columns])
-        aspects = aspects.drop(['BIO', 'char_start', 'char_end', 'token', 'POS'], axis=1)
+    def _find_aspect_sent(self,
+                          aspects: pd.DataFrame,
+                          sents: pd.DataFrame):
+        print('Matching aspects with sents... ')
+        aspect_sents = []
+        sent_ends = {text_id: sents.loc[idx]['end'].tolist() for text_id, idx in sents.groupby('text_id').groups.items()}
+        for _, row in aspects.iterrows():
+            sent_id = bisect_left(sent_ends[row['text_id']], row['start'])
+            aspect_sents.append(sent_id)
+        aspects['sent_id'] = aspect_sents
+        setattr(self, 'parsed_aspects_', aspects)
+        print('"parsed_aspects_" attribute created')
         return aspects
 
-    def _find_sent_offset(self, parsed: pd.DataFrame):
-        sent_offsets = []
-        sents = parsed.groupby(['text_id', 'sent_id']).groups
-        for (text_id, sent_id), token_idxs in sents.items():
-            sent_start = parsed.loc[token_idxs[0], 'char_start']
-            sent_end = parsed.loc[token_idxs[-1], 'char_end']
-            sent_offsets.append((text_id, sent_id, sent_start, sent_end))
-        return pd.DataFrame(sent_offsets, columns=['text_id', 'sent_id', 'sent_start', 'sent_end'])
+    def parsed_aspects(self):
+        parsed_aspects_ = getattr(self, 'parsed_aspects_', None)
+        if parsed_aspects_ is None:
+            return self._find_aspect_sent(self.aspects, self.sent_info())
+        return parsed_aspects_
 
-    def parsed2bertinput(self, parsed: pd.DataFrame):
-        bert_input = []
-        sent_offset = self._find_sent_offset(parsed)
+    def _add_sent_text(self,
+                       parsed_aspects: pd.DataFrame,
+                       sents: pd.DataFrame):
+        print("Adding sentence text to aspects...")
+        merged = pd.merge(parsed_aspects, sents[['text_id', 'sent_id', 'sent']])
+        setattr(self, 'ats_input_', merged)
+        print('"ats_input_" attribute created')
+        return merged
 
-        for text_id, aspect_ids in self.aspects.groupby('text_id').groups.items():
-            text_sents = sent_offset[sent_offset['text_id'] == text_id]
-            review_text = self.reviews[self.reviews['text_id'] == text_id]['text'].values[0]
-            sent_ends = text_sents['sent_end'].tolist()
-            for asp_id in aspect_ids:
-                aspect = self.aspects.loc[asp_id]
-                aspect_sent = bisect_left(sent_ends, aspect['start'])
-                aspect_sent_id = text_sents[text_sents['sent_id'] == aspect_sent].index.tolist()[0]
-                sent_info = text_sents.loc[aspect_sent_id]
-                bert_input.append((
-                        aspect_sent,
-                        review_text[sent_info['sent_start']: sent_info['sent_end']],
-                        *aspect.tolist()
-                ))
-        return pd.DataFrame(bert_input, columns=['sent_id', 'sentence', *self.aspects.columns])
+    def ats_input(self):
+        ats_input_ = getattr(self, 'ats_input_', None)
+        if ats_input_ is None:
+            return self._add_sent_text(self.parsed_aspects(), self.sent_info())
+        return ats_input_
+    #
+    # def bio2aspects(self, bio_annot: pd.DataFrame):
+    #     aspects = []
+    #     aspect_tokens = []
+    #     for idx, token in bio_annot.iterrows():
+    #         token_bio = token['BIO'].split('-')
+    #         if token_bio[0] == 'B':
+    #             if aspect_tokens:
+    #                 aspects.append((
+    #                     ' '.join([t['token'] for t in aspect_tokens]),
+    #                     Counter([t['BIO'].split('-')[1] for t in aspect_tokens]).most_common(1)[0][0],
+    #                     aspect_tokens[0]['char_start'],
+    #                     aspect_tokens[-1]['char_end'],
+    #                     *token.values.tolist()
+    #                 ))
+    #             aspect_tokens = [token]
+    #         elif token_bio[0] == 'I':
+    #             aspect_tokens.append(token)
+    #         elif token_bio[0] == 'O' and aspect_tokens:
+    #             aspects.append((
+    #                 ' '.join([t['token'] for t in aspect_tokens]),
+    #                 Counter([t['BIO'].split('-')[1] for t in aspect_tokens]).most_common(1)[0][0],
+    #                 aspect_tokens[0]['char_start'],
+    #                 aspect_tokens[-1]['char_end'],
+    #                 *token.values.tolist()))
+    #             aspect_tokens = []
+    #     aspects = pd.DataFrame(aspects, columns=['aspect', 'category', 'aspect_start', 'aspect_end', *bio_annot.columns])
+    #     aspects = aspects.drop(['BIO', 'char_start', 'char_end', 'token', 'POS'], axis=1)
+    #     return aspects
+
+    # def _find_sent_offset(self, parsed: pd.DataFrame):
+    #     sent_offsets = []
+    #     sents = parsed.groupby(['text_id', 'sent_id']).groups
+    #     for (text_id, sent_id), token_idxs in sents.items():
+    #         sent_start = parsed.loc[token_idxs[0], 'char_start']
+    #         sent_end = parsed.loc[token_idxs[-1], 'char_end']
+    #         sent_offsets.append((text_id, sent_id, sent_start, sent_end))
+    #     return pd.DataFrame(sent_offsets, columns=['text_id', 'sent_id', 'sent_start', 'sent_end'])
+
+    # def parsed2bertinput(self, parsed: pd.DataFrame):
+    #     bert_input = []
+    #     sent_offset = self._find_sent_offset(parsed)
+    #
+    #     for text_id, aspect_ids in self.aspects.groupby('text_id').groups.items():
+    #         text_sents = sent_offset[sent_offset['text_id'] == text_id]
+    #         review_text = self.reviews[self.reviews['text_id'] == text_id]['text'].values[0]
+    #         sent_ends = text_sents['sent_end'].tolist()
+    #         for asp_id in aspect_ids:
+    #             aspect = self.aspects.loc[asp_id]
+    #             aspect_sent = bisect_left(sent_ends, aspect['start'])
+    #             aspect_sent_id = text_sents[text_sents['sent_id'] == aspect_sent].index.tolist()[0]
+    #             sent_info = text_sents.loc[aspect_sent_id]
+    #             bert_input.append((
+    #                     aspect_sent,
+    #                     review_text[sent_info['sent_start']: sent_info['sent_end']],
+    #                     *aspect.tolist()
+    #             ))
+    #     return pd.DataFrame(bert_input, columns=['sent_id', 'sentence', *self.aspects.columns])
 
 
 if __name__ == '__main__':
     import yaml
     with open('configs.yml', 'r') as file:
         config = yaml.safe_load(file)
+    pd.set_option('display.max_columns', None)
 
     part = input('Dataset part (train, dev, text): ')
 
     dataset = ABSADataset(config['dataset'], part)
 
-    # parsed
-    parsed = dataset.parsed_reviews()
+    # print('parsed_reviews')
+    # print(dataset.parsed_reviews().head())
+    #
+    # print()
+    # print('parsed_aspects')
+    # print(dataset.parsed_aspects().head())
+    #
+    # print()
+    # print('sentence_info')
+    # print(dataset.sent_info().head())
 
     if part == 'train' or part == 'dev':
-        # bio
-        bio = dataset.crf_bio()
+        # print()
+        # print('bio')
+        # print(dataset.crf_bio().head())
 
-        # bert input1
-        # print(bert_input.head())
-        # save_bert_input = input('Save bert input annotation? y/n: ')
-        # if save_bert_input == 'y':
-        #     bert_input.to_csv(f'./data/bert_input_{part}.csv', sep='\t', header=True, index=False)
+        print()
+        print('ats_input')
+        print(dataset.ats_input().head())
+
+    print(dataset.preprocessed_attrs())
 
     save_data = input('Save all preprocessed files? y/n: ')
     if save_data == 'y':
-        dataset.save_preprocessed('./data')
+        dataset.save_preprocessed('./data/preprocessed/')
 
 
