@@ -11,6 +11,39 @@ from spacy import Language
 
 nlp = spacy.load("ru_core_news_sm")
 
+TRUE_ASPECTS = ['text_id', 'aspect', 'category', 'start', 'end', 'sentiment']
+TRUE_REVIEWS = ['text_id', 'text']
+TRUE_CATEGORIES = ['text_id', 'category', 'sentiment']
+
+# TRUE_REVIEWS -> PARSED_REVIEWS
+PARSED_REVIEWS = ['text_id', 'sent_id', 'token', 'POS', 'start', 'end']
+# (PARSED_REVIEWS, TRUE_ASPECTS) -> PARSED_ASPECTS
+PARSED_ASPECTS = ['text_id', 'sent_id', 'aspect', 'category', 'start', 'end']
+# (PARSED_ASPECTS, TRUE_ASPECTS)
+PARSED_ASPECT_SENTIMENTS = ['text_id', 'sent_id', 'sent', 'aspect', 'category', 'start', 'end', 'sentiment']
+
+# (PARSED_REVIEWS, PARSED_ASPECTS) -> BIO
+BIO = ['text_id', 'sent_id', 'token', 'POS', 'start', 'end', 'BIO']
+
+# (PARSED_REVIEWS, TRUE_CATEGORIES) -> TEXT_SENTIMENT
+TEXT_SENTIMENT = ['text_id', 'text', 'category', 'sentiment']
+
+# CRF
+# (PARSED_REVIEWS, PARSED_ASPECTS) -> BIO -> TRAIN
+# PARSED_REVIEWS -> PREDICT -> PARSED_ASPECTS
+
+# ATS
+# PARSED_ASPECT_SENTIMENTS -> TRAIN
+# PARSED_ASPECTS -> PREDICT -> PARSED_ASPECT_SENTIMENTS
+
+# ACS_ALGO
+# -> TRAIN
+# PARSED_ASPECT_SENTIMENTS -> PREDICT -> TRUE_CATEGORIES
+
+# ACS_BERT
+# (PARSED_REVIEWS, TRUE_CATEGORIES) -> TEXT_SENTIMENT -> TRAIN
+# PARSED_ASPECT_SENTIMENTS -> PREDICT -> TRUE_CATEGORIES
+
 
 def split_data(data: pd.DataFrame, train_idx, test_idx, split_col: str = 'text_id') -> Tuple[pd.DataFrame, pd.DataFrame]:
     train_data = data[data[split_col].isin(train_idx)]
@@ -219,8 +252,7 @@ if __name__ == '__main__':
         # bio
         bio = dataset.crf_bio()
 
-        # # bert input1
-        # bert_input = dataset.parsed2bertinput(parsed)
+        # bert input1
         # print(bert_input.head())
         # save_bert_input = input('Save bert input annotation? y/n: ')
         # if save_bert_input == 'y':
