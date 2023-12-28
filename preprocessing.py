@@ -1,4 +1,5 @@
 import os
+from bisect import bisect_left
 from collections import Counter
 from typing import Callable, Union, Iterable, Tuple
 from pathlib import Path
@@ -142,6 +143,36 @@ class ABSADataset:
         aspects = aspects.drop(['BIO', 'char_start', 'char_end', 'token', 'POS'], axis=1)
         return aspects
 
+    def _find_sent_offset(self, parsed: pd.DataFrame):
+        sent_offsets = []
+        sents = parsed.groupby(['text_id', 'sent_id']).groups
+        for (text_id, sent_id), token_idxs in sents.items():
+            sent_start = parsed.loc[token_idxs[0], 'char_start']
+            sent_end = parsed.loc[token_idxs[-1], 'char_end']
+            sent_offsets.append((text_id, sent_id, sent_start, sent_end))
+        return pd.DataFrame(sent_offsets, columns=['text_id', 'sent_id', 'sent_start', 'sent_end'])
+
+    def parsed2bertinput(self, parsed: pd.DataFrame):
+        bert_input = []
+        sent_offset = self._find_sent_offset(parsed)
+
+        for text_id, aspect_ids in self.aspects.groupby('text_id').groups.items():
+            text_sents = sent_offset[sent_offset['text_id'] == text_id]
+            review_text = self.reviews[self.reviews['text_id'] == text_id]['text'].values[0]
+            sent_ends = text_sents['sent_end'].tolist()
+            for asp_id in aspect_ids:
+                aspect = self.aspects.loc[asp_id]
+                aspect_sent = bisect_left(sent_ends, aspect['start'])
+                aspect_sent_id = text_sents[text_sents['sent_id'] == aspect_sent].index.tolist()[0]
+                sent_info = text_sents.loc[aspect_sent_id]
+                bert_input.append((
+                        aspect_sent,
+                        review_text[sent_info['sent_start']: sent_info['sent_end']],
+                        *aspect.tolist()
+                ))
+        return pd.DataFrame(bert_input, columns=['sent_id', 'sentence', *self.aspects.columns])
+
+
 if __name__ == '__main__':
     import yaml
     with open('configs.yml', 'r') as file:
@@ -151,19 +182,27 @@ if __name__ == '__main__':
 
     dataset = ABSADataset(config['dataset'], part)
 
-    # parsed = dataset.parse_reviews()
-    # save_parsed = input('Save parsed dataset? y/n: ')
-    # if save_parsed == 'y':
-    #     parsed.to_csv(f'./data/parsed_{part}.csv', sep='\t', header=True, index=False)
-    #
-    # bio = dataset.to_crf_bio(parsed)
-    # save_bio = input('Save bio annotation? y/n: ')
-    # if save_bio == 'y':
-    #     bio.to_csv(f'./data/bio_{part}.csv', sep='\t', header=True, index=False)
+    # parsed
+    parsed = dataset.parse_reviews()
+    print(parsed.head())
+    save_parsed = input('Save parsed dataset? y/n: ')
+    if save_parsed == 'y':
+        parsed.to_csv(f'./data/parsed_{part}.csv', sep='\t', header=True, index=False)
 
-    bio = pd.read_csv(config['dataset'][part]['bio'], sep='\t', header=0)
-    res = dataset.bio2aspects(bio)
-    print(res.head(30))
+    if part == 'train' or part == 'dev':
+        # bio
+        bio = dataset.to_crf_bio(parsed)
+        print(bio.head())
+        save_bio = input('Save bio annotation? y/n: ')
+        if save_bio == 'y':
+            bio.to_csv(f'./data/bio_{part}.csv', sep='\t', header=True, index=False)
+
+        # bert input1
+        bert_input = dataset.parsed2bertinput(parsed)
+        print(bert_input.head())
+        save_bert_input = input('Save bert input annotation? y/n: ')
+        if save_bert_input == 'y':
+            bert_input.to_csv(f'./data/bert_input_{part}.csv', sep='\t', header=True, index=False)
 
 
 
