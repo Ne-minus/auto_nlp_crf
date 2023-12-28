@@ -240,7 +240,7 @@ if __name__ == '__main__':
 
     if mode == 'train':
         # train
-        train_dataset = ABSADataset(config['dataset'], 'train', './data/')
+        train_dataset = ABSADataset(config['dataset'], 'train')
         crf = crf_model_class(**crf_config['default_params'])
         crf.fit(train_dataset)
 
@@ -249,7 +249,7 @@ if __name__ == '__main__':
             crf.save_checkpoint(f'./checkpoints/{checkpoint_file}.sav')
 
         # eval
-        eval_dataset = ABSADataset(config['dataset'], 'dev', './data/')
+        eval_dataset = ABSADataset(config['dataset'], 'dev')
         f1_eval, acc_eval = crf.evaluate(eval_dataset)
         print(f'F-score on evaluation set: {f1_eval, acc_eval}')
 

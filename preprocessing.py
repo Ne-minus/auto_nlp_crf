@@ -79,12 +79,10 @@ class ABSADataset:
 
     def __init__(self,
                  dataset_configs: dict,
-                 part: str = 'train',
-                 save_data: Union[str, os.PathLike] = None):
+                 part: str = 'train'):
 
         self.dataset_configs = dataset_configs[part]
         self.part = part
-        self.save_data = save_data
 
         self.reviews = pd.read_csv(self.dataset_configs['reviews'],
                                    sep='\t', header=None, index_col=None, names=['text_id', 'text'])
@@ -312,7 +310,7 @@ if __name__ == '__main__':
         config = yaml.safe_load(file)
     pd.set_option('display.max_columns', None)
 
-    part = input('Dataset part (train, dev, text): ')
+    part = input('Dataset part (train, dev, test): ')
 
     dataset = ABSADataset(config['dataset'], part)
 
@@ -336,7 +334,9 @@ if __name__ == '__main__':
         print('ats_input')
         print(dataset.ats_input().head())
 
-    print(dataset.preprocessed_attrs())
+    print()
+    print('ats_input')
+    print(dataset.ats_input().head())
 
     save_data = input('Save all preprocessed files? y/n: ')
     if save_data == 'y':
