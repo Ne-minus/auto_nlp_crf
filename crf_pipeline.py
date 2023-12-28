@@ -9,11 +9,16 @@ import sklearn_crfsuite
 from sklearn_crfsuite import metrics
 
 
-from abstract_pipelines import ATCDetection
+from abstract_pipelines import ABSAComponent
 from preprocessing import ABSADataset
 
 
-class CRFModel(ATCDetection):
+class CRFModel(ABSAComponent):
+
+    oblig_attrs = {
+        'train': {'reviews'},
+        'inference': {'reviews'}
+    }
 
     def __init__(self,
                  algorithm='lbfgs',
@@ -162,8 +167,16 @@ class CRFModel(ATCDetection):
                 y.append(X_dataset.loc[tokens]['BIO'].values.tolist())
         return X, y
 
+    def _validate_dataset(self,
+                         dataset: ABSADataset,
+                         part: str):
+        missing = self.oblig_attrs[part] - set(dir(dataset))
+        if missing:
+            raise ValueError(f'Dataset missing the following obligatory attrs: {missing}')
+
     def fit(self,
             train_dataset: ABSADataset) -> None:
+        self._validate_dataset(train_dataset, 'train')
         print('Reprocessing your train data...')
         bio_annotation = train_dataset.crf_bio()
         X_train_features, y_train_labels = self.construct_features(bio_annotation)
@@ -177,6 +190,7 @@ class CRFModel(ATCDetection):
     def evaluate(self,
                  eval_dataset: ABSADataset) -> Tuple[float, float]:
         print('Reprocessing your eval data...')
+        self._validate_dataset(eval_dataset, 'train')
         bio_annotation = eval_dataset.crf_bio()
         X_test_features, y_test_labels = self.construct_features(bio_annotation)
         y_eval = self.crf_class.predict(X_test_features)
@@ -190,6 +204,7 @@ class CRFModel(ATCDetection):
     def predict(self,
                 test_data: ABSADataset):
         print('Reprocessing your test data...')
+        self._validate_dataset(test_data, 'inference')
         parsed_test_data = test_data.parsed_reviews()
 
         featured_test_data, _ = self.construct_features(parsed_test_data, train=False)
@@ -226,7 +241,6 @@ if __name__ == '__main__':
     if mode == 'train':
         # train
         train_dataset = ABSADataset(config['dataset'], 'train', './data/')
-        print(train_dataset.preprocessed_attrs())
         crf = crf_model_class(**crf_config['default_params'])
         crf.fit(train_dataset)
 
@@ -236,7 +250,6 @@ if __name__ == '__main__':
 
         # eval
         eval_dataset = ABSADataset(config['dataset'], 'dev', './data/')
-        print(eval_dataset.preprocessed_attrs())
         f1_eval, acc_eval = crf.evaluate(eval_dataset)
         print(f'F-score on evaluation set: {f1_eval, acc_eval}')
 
