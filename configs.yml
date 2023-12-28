@@ -34,9 +34,15 @@ components:
       c1: 0.3
       c2: 0.2
   bert_ats:
-    class_name: BERTSentiment
+    class_name: ATSBert
     default_params:
       model_name: "MonoHime/rubert-base-cased-sentiment-new"
+      sentiment_map:
+        NEGATIVE: 'negative'
+        NEUTRAL: 'neutral'
+        POSITIVE: 'positive'
+      prompt_type: 1
+      lang: ru
   bert_acs:
     class_name: BERTSentiment
     default_params:
@@ -45,11 +51,19 @@ components:
 checkpoints:
   crf:
     path: './checkpoints/crf_weights_ud+positions.sav'
+  bert_ats:
+    model_name: "MonoHime/rubert-base-cased-sentiment-new"
+    sentiment_map:
+      NEGATIVE: 'negative'
+      NEUTRAL: 'neutral'
+      POSITIVE: 'positive'
+    prompt_type: 1
+    lang: ru
 
 pipelines:
   atc+ats+acs:
-    pipeliine_class: ThreeShotPipeline
+    class_name: ThreeShotPipeline
     components:
       - crf
       - bert_ats
-      - bert_acs
+#      - bert_acs
