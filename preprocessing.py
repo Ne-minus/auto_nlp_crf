@@ -60,7 +60,35 @@ class ABSADataset:
             self.categories = pd.read_csv(self.dataset_configs['categories'], sep='\t', header=None, index_col=None,
                                           names=['text_id', 'category', 'sentiment'])
 
-    def parse_reviews(self):
+        self._load_preprocessed()
+
+    def _load_preprocessed(self):
+        preprocessed = self.dataset_configs.get('preprocessed', [])
+        for data_type in preprocessed:
+            df = pd.read_csv(preprocessed[data_type], sep='\t', header=0)
+            setattr(self, data_type + '_', df)
+
+    def save_preprocessed(self,
+                          data_path: Union[str, os.PathLike]):
+        preprocessed = self.preprocessed_attrs()
+        print(F'Saving the following data: {preprocessed}')
+        for attr_name in preprocessed:
+            attr_data = getattr(self, attr_name)
+            attr_data.to_csv(Path(data_path, f'{attr_name}{self.part}.csv').resolve(),
+                             sep='\t', header=True, index=False)
+
+    def preprocessed_attrs(self):
+        return [attr for attr in dir(self) if attr[-1] == '_' and attr[-2] != '_']
+
+    def parsed_reviews(self):
+        parsed_ = getattr(self, 'parsed_', None)
+        if parsed_ is None:
+            return self._parse_reviews()
+        return parsed_
+
+    def _parse_reviews(self):
+        print('Parsing reviews...')
+
         parsed = []
         for _, text in self.reviews.iterrows():
             tokenized = ABSADataset.spacy_tokenizer(text.text, True)
@@ -72,17 +100,22 @@ class ABSADataset:
                         *token,
                     ))
         parsed = pd.DataFrame(parsed, columns=['text_id', 'sent_id', 'token', 'POS', 'char_start', 'char_end'])
-
-        if self.save_data:
-            parsed.to_csv(Path(self.save_data, f'parsed_{self.part}.csv').resolve(),
-                          sep='\t', header=True, index=False)
+        setattr(self, 'parsed_', parsed)
         return parsed
 
-    def to_crf_bio(self,
-                   parsed: pd.DataFrame):
+    def crf_bio(self):
+        bio_ = getattr(self, 'bio_', None)
+        if bio_ is None:
+            parsed = self.parsed_reviews()
+            return self._to_crf_bio(parsed)
+        return bio_
+
+    def _to_crf_bio(self,
+                    parsed: pd.DataFrame):
         if not isinstance(self.aspects, pd.DataFrame):
             raise AttributeError('To convert to BIO you should init with aspect_file')
 
+        print('Converting to BIO...')
         bio = []
         token_idx = []
         for text_id, token_ids in parsed.groupby(by='text_id').groups.items():
@@ -108,10 +141,7 @@ class ABSADataset:
                 token_idx.append(i)
 
         parsed['BIO'] = pd.Series(bio, token_idx)
-
-        if self.save_data:
-            parsed.to_csv(Path(self.save_data, f'bio_{self.part}.csv').resolve(),
-                          sep='\t', header=True, index=False)
+        setattr(self, 'bio_', parsed)
         return parsed
 
     def bio2aspects(self, bio_annot: pd.DataFrame):
@@ -178,31 +208,26 @@ if __name__ == '__main__':
     with open('configs.yml', 'r') as file:
         config = yaml.safe_load(file)
 
-    part = input('Dataset part (train, dev): ')
+    part = input('Dataset part (train, dev, text): ')
 
     dataset = ABSADataset(config['dataset'], part)
 
     # parsed
-    parsed = dataset.parse_reviews()
-    print(parsed.head())
-    save_parsed = input('Save parsed dataset? y/n: ')
-    if save_parsed == 'y':
-        parsed.to_csv(f'./data/parsed_{part}.csv', sep='\t', header=True, index=False)
+    parsed = dataset.parsed_reviews()
 
     if part == 'train' or part == 'dev':
         # bio
-        bio = dataset.to_crf_bio(parsed)
-        print(bio.head())
-        save_bio = input('Save bio annotation? y/n: ')
-        if save_bio == 'y':
-            bio.to_csv(f'./data/bio_{part}.csv', sep='\t', header=True, index=False)
+        bio = dataset.crf_bio()
 
-        # bert input1
-        bert_input = dataset.parsed2bertinput(parsed)
-        print(bert_input.head())
-        save_bert_input = input('Save bert input annotation? y/n: ')
-        if save_bert_input == 'y':
-            bert_input.to_csv(f'./data/bert_input_{part}.csv', sep='\t', header=True, index=False)
+        # # bert input1
+        # bert_input = dataset.parsed2bertinput(parsed)
+        # print(bert_input.head())
+        # save_bert_input = input('Save bert input annotation? y/n: ')
+        # if save_bert_input == 'y':
+        #     bert_input.to_csv(f'./data/bert_input_{part}.csv', sep='\t', header=True, index=False)
 
+    save_data = input('Save all preprocessed files? y/n: ')
+    if save_data == 'y':
+        dataset.save_preprocessed('./data')
 
 

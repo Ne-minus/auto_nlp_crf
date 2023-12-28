@@ -3,16 +3,20 @@ dataset:
     reviews: './data/reviews_train.csv'
     aspects: './data/aspects_train.csv'
     categories: './data/categories_train.csv'
-    bio: './data/bio_train.csv'
+    preprocessed:
+      parsed: './data/parsed_train.csv'
+      bio: './data/bio_train.csv'
   dev:
     reviews: './data/reviews_dev.csv'
     aspects: './data/aspects_dev.csv'
     categories: './data/categories_dev.csv'
-    parsed: './data/parsed_dev.csv'
-    bio: './data/bio_dev.csv'
+    preprocessed:
+      parsed: './data/parsed_dev.csv'
+      bio: './data/bio_dev.csv'
   test:
     reviews: './data/reviews_dev.csv'
-    parsed: './data/parsed_dev.csv'
+    preprocessed:
+      parsed: './data/parsed_dev.csv'
 
 components:
   crf:

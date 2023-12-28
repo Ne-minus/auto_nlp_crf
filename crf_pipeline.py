@@ -162,31 +162,10 @@ class CRFModel(ATCDetection):
                 y.append(X_dataset.loc[tokens]['BIO'].values.tolist())
         return X, y
 
-    def _to_parsed(self,
-                   dataset: ABSADataset) -> pd.DataFrame:
-
-        parsed_file = dataset.dataset_configs.get('parsed', None)
-        if not parsed_file:
-            parsed = dataset.parse_reviews()
-        else:
-            parsed = pd.read_csv(parsed_file, sep='\t', header=0)
-        return parsed
-
-    def _to_bio(self,
-                dataset: ABSADataset) -> pd.DataFrame:
-        dataset_configs = dataset.dataset_configs
-        bio_file = dataset_configs.get('bio', None)
-        if not bio_file:
-            parsed = self._to_parsed(dataset)
-            bio = dataset.to_crf_bio(parsed)
-        else:
-            bio = pd.read_csv(bio_file, sep='\t', header=0)
-        return bio
-
     def fit(self,
             train_dataset: ABSADataset) -> None:
         print('Reprocessing your train data...')
-        bio_annotation = self._to_bio(train_dataset)
+        bio_annotation = train_dataset.crf_bio()
         X_train_features, y_train_labels = self.construct_features(bio_annotation)
         self.crf_class.fit(X_train_features, y_train_labels)
 
@@ -198,7 +177,7 @@ class CRFModel(ATCDetection):
     def evaluate(self,
                  eval_dataset: ABSADataset) -> Tuple[float, float]:
         print('Reprocessing your eval data...')
-        bio_annotation = self._to_bio(eval_dataset)
+        bio_annotation = eval_dataset.crf_bio()
         X_test_features, y_test_labels = self.construct_features(bio_annotation)
         y_eval = self.crf_class.predict(X_test_features)
         labels = self.crf_class.classes_
@@ -211,7 +190,7 @@ class CRFModel(ATCDetection):
     def predict(self,
                 test_data: ABSADataset):
         print('Reprocessing your test data...')
-        parsed_test_data = self._to_parsed(test_data)
+        parsed_test_data = test_data.parsed_reviews()
 
         featured_test_data, _ = self.construct_features(parsed_test_data, train=False)
         preds = self.crf_class.predict(featured_test_data)
@@ -247,6 +226,7 @@ if __name__ == '__main__':
     if mode == 'train':
         # train
         train_dataset = ABSADataset(config['dataset'], 'train', './data/')
+        print(train_dataset.preprocessed_attrs())
         crf = crf_model_class(**crf_config['default_params'])
         crf.fit(train_dataset)
 
@@ -256,6 +236,7 @@ if __name__ == '__main__':
 
         # eval
         eval_dataset = ABSADataset(config['dataset'], 'dev', './data/')
+        print(eval_dataset.preprocessed_attrs())
         f1_eval, acc_eval = crf.evaluate(eval_dataset)
         print(f'F-score on evaluation set: {f1_eval, acc_eval}')
 
@@ -265,4 +246,6 @@ if __name__ == '__main__':
         crf = crf_model_class.from_pretrained(pretrained)
 
         test_dataset = ABSADataset(config['dataset'], 'test')
-        crf.predict(test_dataset)
+        print(test_dataset.preprocessed_attrs())
+        pred = crf.predict(test_dataset)
+        print(pred)
