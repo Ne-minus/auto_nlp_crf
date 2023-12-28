@@ -2,8 +2,6 @@ import os
 from abc import ABC, abstractmethod
 from typing import Union
 
-import pandas as pd
-
 from preprocessing import ABSADataset
 
 
@@ -43,16 +41,10 @@ class ABSAPipeline(ABC):
         ...
 
 
-class ATCDetection(ABC):
-    """
-    Aspect term and category detection
-    """
-
+class ABSAComponent(ABC):
     @abstractmethod
     def fit(self,
-            train_datset: ABSADataset):
-        """
-        """
+            train_dataset: ABSADataset):
         ...
 
     @staticmethod
@@ -64,11 +56,3 @@ class ATCDetection(ABC):
     def predict(self,
                 test_dataset: ABSADataset):
         ...
-
-
-class AspectTermSentiment(ABC):
-    @abstractmethod
-    def fit(self,
-            train_dataset: ABSADataset):
-        ...
-
