@@ -4,6 +4,7 @@
 3. Следовать инструкциям, появляющимся в командной строке (необходимо указать пути к тестовому датасету и золотому стандарту)
 ```
 git clone https://github.com/Ne-minus/nlp_4th_year_absa_project.git
+pip install -r requirements.txt
 python3 evaluation.py
 ```
 
