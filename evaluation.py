@@ -149,7 +149,7 @@ if __name__ == '__main__':
     with open('configs.yml', 'r') as file:
         config = yaml.safe_load(file)
 
-    pipe = input(f'Select pipeline ({list(config["pipelines"].keys())}): ')
+    pipe = input(f'Select pipeline ({" ".join(list(config["pipelines"].keys()))}): ')
     if pipe not in config["pipelines"].keys():
         raise ValueError('Unknown pipeline')
 

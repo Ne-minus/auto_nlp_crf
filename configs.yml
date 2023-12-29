@@ -41,8 +41,21 @@ components:
         NEGATIVE: 'negative'
         NEUTRAL: 'neutral'
         POSITIVE: 'positive'
+      model_type: pipeline
       prompt_type: 1
       lang: ru
+  bert_ats_finetuned:
+    class_name: ATSBert
+    default_params:
+      model_name: "Bareubara/absa-bert-model"
+      model_type: model
+      prompt_type: 1
+      lang: ru
+      sentiment_map:
+        0: both,
+        1: negative
+        2: neutral
+        3: positive
   algo_acs:
     class_name: ACSAlgo
     default_params:
@@ -57,8 +70,19 @@ checkpoints:
       NEGATIVE: 'negative'
       NEUTRAL: 'neutral'
       POSITIVE: 'positive'
+    model_type: pipeline
     prompt_type: 1
     lang: ru
+  bert_ats_finetuned:
+    model_name: "Bareubara/absa-bert-model"
+    model_type: model
+    prompt_type: 1
+    lang: ru
+    sentiment_map:
+      0: both,
+      1: negative
+      2: neutral
+      3: positive
   algo_acs:
     categories:
       - Food
@@ -72,5 +96,5 @@ pipelines:
     class_name: ThreeShotPipeline
     components:
       - crf
-      - bert_ats
+      - bert_ats_finetuned
       - algo_acs
