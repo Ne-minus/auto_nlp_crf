@@ -19,6 +19,7 @@ class CRFModel(ABSAComponent):
         'train': {'reviews'},
         'inference': {'reviews'}
     }
+    output_type = 'parsed_aspects_'
 
     def __init__(self,
                  algorithm='lbfgs',
@@ -36,8 +37,8 @@ class CRFModel(ABSAComponent):
         )
 
     @staticmethod
-    def from_pretrained(path_to_pretrained: Union[os.PathLike, str]):
-        with open(path_to_pretrained, 'rb') as f:
+    def from_pretrained(path: Union[os.PathLike, str]):
+        with open(path, 'rb') as f:
             crf_class = pickle.load(f)
 
         crf_model = CRFModel()
@@ -215,7 +216,9 @@ class CRFModel(ABSAComponent):
         parsed_test_data['predictions'] = preds
         parsed_test_data.reset_index(level=['text_id', 'sent_id'], inplace=True)
 
-        parsed_test_data['results'] = parsed_test_data.apply(lambda x: self.extract_info(x.text_id, x.sent_id, x.predictions, x.token, x.char_start, x.char_end), axis=1)
+        parsed_test_data['results'] = parsed_test_data.apply(
+            lambda x: self.extract_info(
+                x['text_id'], x['sent_id'], x['predictions'], x['token'], x['start'], x['end']), axis=1)
 
         results = list(parsed_test_data['results'])
 
@@ -232,6 +235,8 @@ if __name__ == '__main__':
     import yaml
     with open('configs.yml', 'r') as file:
         config = yaml.safe_load(file)
+
+    pd.set_option('display.max_columns', None)
 
     mode = input('Select mode (train or inference): ')
     crf_config = config['components']['crf']
@@ -259,3 +264,4 @@ if __name__ == '__main__':
 
         test_dataset = ABSADataset(config['dataset'], 'test')
         pred = crf.predict(test_dataset)
+        print(pred.head())

@@ -192,8 +192,8 @@ class ABSADataset:
                 token = parsed.loc[i]
 
                 if aspect_idx <= text_aspects.index[-1] and \
-                        token.char_start >= text_aspects.loc[aspect_idx, 'start'] and \
-                        token.char_end <= text_aspects.loc[aspect_idx, 'end']:
+                        token['start'] >= text_aspects.loc[aspect_idx, 'start'] and \
+                        token['end'] <= text_aspects.loc[aspect_idx, 'end']:
                     bio_tag = 'B' if not prev_is_ent else 'I'
                     bio_tag = bio_tag + '-' + text_aspects.loc[aspect_idx, 'category']
                     prev_is_ent = True
@@ -314,21 +314,21 @@ if __name__ == '__main__':
 
     dataset = ABSADataset(config['dataset'], part)
 
-    # print('parsed_reviews')
-    # print(dataset.parsed_reviews().head())
-    #
-    # print()
-    # print('parsed_aspects')
-    # print(dataset.parsed_aspects().head())
-    #
-    # print()
-    # print('sentence_info')
-    # print(dataset.sent_info().head())
+    print('parsed_reviews')
+    print(dataset.parsed_reviews().head())
+
+    print()
+    print('parsed_aspects')
+    print(dataset.parsed_aspects().head())
+
+    print()
+    print('sentence_info')
+    print(dataset.sent_info().head())
 
     if part == 'train' or part == 'dev':
-        # print()
-        # print('bio')
-        # print(dataset.crf_bio().head())
+        print()
+        print('bio')
+        print(dataset.crf_bio().head())
 
         print()
         print('ats_input')

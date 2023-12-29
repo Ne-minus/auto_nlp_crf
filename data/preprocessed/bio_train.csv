@@ -1,4 +1,4 @@
-text_id	sent_id	token	POS	char_start	char_end	BIO
+text_id	sent_id	token	POS	start	end	BIO
 3976	0	День	NOUN	0	4	O
 3976	0	8-го	ADJ	5	9	O
 3976	0	марта	NOUN	10	15	O

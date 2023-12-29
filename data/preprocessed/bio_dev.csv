@@ -1,4 +1,4 @@
-text_id	sent_id	token	POS	char_start	char_end	BIO
+text_id	sent_id	token	POS	start	end	BIO
 1368	0	Впервые	ADV	0	7	O
 1368	0	побывала	VERB	8	16	O
 1368	0	в	ADP	17	18	O

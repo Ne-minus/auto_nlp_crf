@@ -26,6 +26,8 @@ class ATSBert(ABSAComponent):
         'inference': {'reviews', 'parsed_aspects_'}
     }
 
+    input_type = 'ats_input_'
+
     cats_transl = {
         'Whole': {'ru': 'впечатление в целом', 'en': 'Whole'},
         'Service': {'ru': 'сервис', 'en': 'Service'},
@@ -98,6 +100,7 @@ class ATSBert(ABSAComponent):
                 test_dataset: ABSADataset):
         self._validate_dataset(test_dataset, part='inference')
         ats_input = test_dataset.ats_input()
+        print(ats_input)
         ats_input['category'] = self.translate_category(ats_input)['category']
         return self._predict(ats_input)
 
