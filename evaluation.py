@@ -160,7 +160,7 @@ if __name__ == '__main__':
         Partial category accuracy: {metrics[4]}
         """)
 
-    print('Sentiment analysis result: ')
+    print('Sentiment analysis results: ')
     sentiment_full = evaluation.sentiment_accuracy(fully_matched)
     sentiment_part = evaluation.sentiment_accuracy(partially_matched)
     print(f'''
@@ -168,7 +168,7 @@ if __name__ == '__main__':
         Mention sentiment accuracy on partial matches:{sentiment_part}
         ''')
     
-    print(f'Overall accuracy by cats: {evaluation.sentiment_cats(pred_cats)}')
+    print(f'Overall accuracy by categories: {evaluation.sentiment_cats(pred_cats)}')
 
           
 
