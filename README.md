@@ -28,11 +28,11 @@
 
 | Метрика       |               | 
 | :------------- |:------------------:|
-| Full-match precision   | 0.9    |
+| Full-match precision   | **0.9**   |
 |Full-match recall   | 0.31 |
-| Partial match ratio  | 0.96        |
-| Full category accuracy  | 0.9         |
-| Partial category accuracy  | 0.94         |
+| Partial match ratio  | **0.96**        |
+| Full category accuracy  | **0.9**         |
+| Partial category accuracy  | **0.94**         |
 
 
 Качество заметно выросло, особенно для full category accuracy, поэтому решили остановиться на варианте с UD-тегами.
