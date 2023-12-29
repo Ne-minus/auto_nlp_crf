@@ -110,17 +110,17 @@ class CRFModel(ABSAComponent):
                 holder = {}
                 holder['text_id'] = text_id
                 holder['sent_id'] = sent_id
-                holder['aspect'] = tag[2:]
-                holder['token'] = tokens[id]
+                holder['category'] = tag[2:]
+                holder['aspect'] = tokens[id]
                 holder['start'] = starts[id]
                 holder['end'] = ends[id]
 
                 lists.append(holder)
             elif tag.startswith('I-'):
                 if tokens[id] in ',./-:!?':
-                    lists[-1]['token'] += tokens[id]
+                    lists[-1]['aspect'] += tokens[id]
                 else:
-                    lists[-1]['token'] += f' {tokens[id]}'
+                    lists[-1]['aspect'] += f' {tokens[id]}'
                 lists[-1]['end'] = ends[id]
                 
         return [lst for lst in lists if lst]
