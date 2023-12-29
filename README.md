@@ -1,6 +1,6 @@
 ## Ипользование  
 1. Склонировать репозиторий
-2. Запустить файл evaluation.py
+2. Запустить файл [**evaluation.py**](https://github.com/Ne-minus/nlp_4th_year_absa_project/blob/pipeline_interface/evaluation.py)
 3. Следовать инструкциям, появляющимся в командной строке (необходимо указать пути к тестовому датасету и золотому стандарту)
 ```
 git clone https://github.com/Ne-minus/nlp_4th_year_absa_project.git
