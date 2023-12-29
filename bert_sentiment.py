@@ -26,7 +26,7 @@ class ATSBert(ABSAComponent):
         'inference': {'reviews', 'parsed_aspects_'}
     }
 
-    input_type = 'ats_input_'
+    output_type = 'ats_input_'
 
     cats_transl = {
         'Whole': {'ru': 'впечатление в целом', 'en': 'Whole'},
@@ -76,7 +76,7 @@ class ATSBert(ABSAComponent):
 
     def translate_category(self,
                            data: pd.DataFrame):
-        data['category'] = data.apply(lambda x: self.cats_transl[x['category']][self.lang], axis=1)
+        data['category_tr'] = data.apply(lambda x: self.cats_transl[x['category']][self.lang], axis=1)
         return data
 
     def _predict(self,
@@ -84,7 +84,7 @@ class ATSBert(ABSAComponent):
         data = []
         print('Predicting sentiments...')
         for _, row in tqdm(ats_input.iterrows(), total=ats_input.shape[0]):
-            result = self.model(self.fill_prompt(self.prompt_type, row['sent'], row['aspect'], row['category']))
+            result = self.model(self.fill_prompt(self.prompt_type, row['sent'], row['aspect'], row['category_tr']))
             data.append(self.sentiment_map[result[0]['label']])
         ats_input['sentiment'] = data
         return ats_input
@@ -100,9 +100,7 @@ class ATSBert(ABSAComponent):
                 test_dataset: ABSADataset):
         self._validate_dataset(test_dataset, part='inference')
         ats_input = test_dataset.ats_input()
-        print(ats_input)
-        ats_input['category'] = self.translate_category(ats_input)['category']
-        return self._predict(ats_input)
+        return self._predict(self.translate_category(ats_input))
 
 
 if __name__ == '__main__':
@@ -110,6 +108,8 @@ if __name__ == '__main__':
 
     with open('configs.yml', 'r') as file:
         config = yaml.safe_load(file)
+
+    pd.set_option('display.max_columns', None)
 
     bert_config = config['components']['bert_ats']
     checkpoints = config['checkpoints']
