@@ -1,5 +1,6 @@
 from collections import defaultdict
 
+
 class Evaluator:
     def __init__(self, path_aspects, path_categories):
         self.gold_aspects = path_aspects
@@ -30,8 +31,8 @@ class Evaluator:
             for line in fp:    
                 total += 1
                 line = line.rstrip('\r\n').split('\t')
-                start, end = int(line[4]), int(line[5])
-                category = line[2]
+                start, end = int(line[3]), int(line[4])
+                category = line[1]
                 doc_gold_aspect_cats = gold_aspect_cats[line[0]]
                 if start in doc_gold_aspect_cats["starts"]:
                     i = doc_gold_aspect_cats["starts"].index(start)
@@ -141,12 +142,23 @@ class Evaluator:
 
             return len(gold_labels & pred_labels) / len(gold_labels)
 
-if __name__ == '__main__':
-    gold_aspects = './data/aspects_dev.csv'
-    pred_aspects = 'aspects_predicted.tsv'
 
-    gold_cats = './data/categories_dev.csv'
-    pred_cats = './data/categories_dev.csv'
+if __name__ == '__main__':
+    gold_aspects = input('Path to gold aspects: ')
+    if not gold_aspects:
+        gold_aspects = './data/aspects_dev.csv'
+
+    pred_aspects = input('Path to predicted aspects: ')
+    if not pred_aspects:
+        pred_aspects = './data/res/aspects_pred.csv'
+
+    gold_cats = input('Path to gold categories: ')
+    if not gold_cats:
+        gold_cats = './data/categories_dev.csv'
+
+    pred_cats = input('Path to predicted categories: ')
+    if not pred_cats:
+        pred_cats = './data/res/categories_dev.csv'
 
     evaluation = Evaluator(gold_aspects, gold_cats)
 
@@ -168,7 +180,7 @@ if __name__ == '__main__':
         Mention sentiment accuracy on partial matches:{sentiment_part}
         ''')
     
-    print(f'Overall accuracy by categories: {evaluation.sentiment_cats(pred_cats)}')
+    # print(f'Overall accuracy by categories: {evaluation.sentiment_cats(pred_cats)}')
 
           
 

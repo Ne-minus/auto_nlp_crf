@@ -4,8 +4,8 @@ from typing import Union, Iterable, Tuple, Dict
 
 from abstract_pipelines import ABSAPipeline
 from preprocessing import ABSADataset
-from crf_pipeline import CRFModel
-from bert_sentiment import ATSBert
+from crf_model import CRFModel
+from ats_bert_model import ATSBert
 
 
 class ThreeShotPipeline:
@@ -48,12 +48,19 @@ class ThreeShotPipeline:
 
     def predict(self,
                 test_dataset: ABSADataset):
-        preds = []
         for model in self.models:
             pred = model.predict(test_dataset)
-            preds.append(pred)
             setattr(test_dataset, model.output_type, pred)
-        return preds
+        return test_dataset
+
+    @staticmethod
+    def write_res_files(test_dataset: ABSADataset,
+                        res_folder: Union[str, os.PathLike] = './data/res/'):
+        res_folder = Path(res_folder).resolve()
+        res_folder.mkdir(parents=True, exist_ok=True)
+
+        aspects = test_dataset.ats_input()[['text_id', 'category', 'aspect', 'start', 'end', 'sentiment']]
+        aspects.to_csv(Path(res_folder, f'aspects_pred.csv'), sep='\t', header=False, index=False)
 
 
 if __name__ == '__main__':
@@ -72,5 +79,7 @@ if __name__ == '__main__':
     pipeline = globals()[pl_config['class_name']].from_checkpoints(components_config, checkpoints_config)
 
     test_dataset = ABSADataset(config['dataset'], 'test')
-    res = pipeline.predict(test_dataset)
-    print(res)
+    res_dataset = pipeline.predict(test_dataset)
+    save = input('Save result? y/n: ')
+    if save:
+        pipeline.write_res_files(res_dataset)
