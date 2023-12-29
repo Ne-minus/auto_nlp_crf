@@ -101,13 +101,14 @@ class CRFModel(ABSAComponent):
             features['EOS'] = True
         return features
 
-    def extract_info(self, text_id, bios, tokens, starts, ends):
+    def extract_info(self, text_id, sent_id, bios, tokens, starts, ends):
         lists = []
 
         for id, tag in enumerate(bios):
             if tag.startswith('B-') or (tag.startswith('I-') and bios[id-1] == 'O'):
                 holder = {}
                 holder['text_id'] = text_id
+                holder['sent_id'] = sent_id
                 holder['aspect'] = tag[2:]
                 holder['token'] = tokens[id]
                 holder['start'] = starts[id]
@@ -212,9 +213,9 @@ class CRFModel(ABSAComponent):
 
         parsed_test_data = parsed_test_data.groupby(by=['text_id', 'sent_id']).agg(list)
         parsed_test_data['predictions'] = preds
-        parsed_test_data.reset_index(level='text_id', inplace=True)
+        parsed_test_data.reset_index(level=['text_id', 'sent_id'], inplace=True)
 
-        parsed_test_data['results'] = parsed_test_data.apply(lambda x: self.extract_info(x.text_id, x.predictions, x.token, x.char_start, x.char_end), axis=1)
+        parsed_test_data['results'] = parsed_test_data.apply(lambda x: self.extract_info(x.text_id, x.sent_id, x.predictions, x.token, x.char_start, x.char_end), axis=1)
 
         results = list(parsed_test_data['results'])
 
@@ -222,8 +223,6 @@ class CRFModel(ABSAComponent):
         for sent in results:
             if sent:
                 final.extend(sent)
-
-        pd.DataFrame(final).to_csv('aspects_predicted.tsv', header=False, index=False, sep='\t')
 
         return pd.DataFrame(final)
 
@@ -259,6 +258,4 @@ if __name__ == '__main__':
         crf = crf_model_class.from_pretrained(pretrained)
 
         test_dataset = ABSADataset(config['dataset'], 'test')
-        print(test_dataset.preprocessed_attrs())
         pred = crf.predict(test_dataset)
-        print(pred)
