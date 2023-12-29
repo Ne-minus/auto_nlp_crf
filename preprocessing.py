@@ -1,7 +1,6 @@
 import os
 from bisect import bisect_left
-from collections import Counter
-from typing import Callable, Union, Iterable, Tuple
+from typing import Union, Iterable, Tuple
 from pathlib import Path
 
 import pandas as pd
@@ -10,41 +9,6 @@ from spacy import Language
 
 
 nlp = spacy.load("ru_core_news_sm")
-
-TRUE_ASPECTS = ['text_id', 'aspect', 'category', 'start', 'end', 'sentiment']
-TRUE_REVIEWS = ['text_id', 'text']
-TRUE_CATEGORIES = ['text_id', 'category', 'sentiment']
-
-# TRUE_REVIEWS -> PARSED_REVIEWS +
-PARSED_REVIEWS = ['text_id', 'sent_id', 'token', 'POS', 'start', 'end']
-# TRUE_REVIEWS -> SENT_INFO  +
-SENT_INFO = ['text_id', 'sent_id', 'sent', 'start', 'end']
-# (SENT_INFO, TRUE_ASPECTS) -> PARSED_ASPECTS  +                               # optional
-PARSED_ASPECTS = ['text_id', 'sent_id', 'aspect', 'category', 'start', 'end', 'sentiment']
-# (SENT_INFO, PARSED_ASPECTS) -> ATS_FORMAT  +                               # optional   # new
-ATS_FORMAT = ['text_id', 'sent_id', 'aspect', 'category', 'start', 'end', 'sentiment', 'sent']
-
-# (PARSED_REVIEWS, TRUE_ASPECTS) -> BIO +
-BIO = ['text_id', 'sent_id', 'token', 'POS', 'start', 'end', 'BIO']
-
-# (PARSED_REVIEWS, TRUE_CATEGORIES) -> TEXT_SENTIMENT
-TEXT_SENTIMENT = ['text_id', 'text', 'category', 'sentiment']
-
-# CRF
-# (PARSED_REVIEWS, TRUE_ASPECTS) -> BIO -> TRAIN
-# REVIEWS -> PARSED_REVIEWS -> predict -> PARSED_ASPECTS (without sentiment)
-
-# ATS
-# ATS_FORMAT (with sentiment) -> TRAIN
-# (SENT_INFO, PARSED_ASPECTS (without sentiment)) -> ATS_FORMAT (without sentiment) -> PREDICT -> ATS_FORMAT (with sentiment)
-
-# ACS_ALGO
-# ... -> TRAIN
-# PARSED_ASPECTS (with sentiment) -> PREDICT -> TRUE_CATEGORIES
-
-# ACS_BERT
-# (PARSED_REVIEWS, TRUE_CATEGORIES) -> TEXT_SENTIMENT -> TRAIN
-# PARSED_ASPECT_SENTIMENTS -> PREDICT -> TRUE_CATEGORIES
 
 
 def split_data(data: pd.DataFrame, train_idx, test_idx, split_col: str = 'text_id') -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -135,7 +99,7 @@ class ABSADataset:
                     ))
         parsed = pd.DataFrame(parsed, columns=['text_id', 'sent_id', 'token', 'POS', 'start', 'end'])
         setattr(self, 'parsed_', parsed)
-        print('"parsed_" attribute created')
+        # print('"parsed_" attribute created')
         return parsed
 
     def sent_info(self):
@@ -164,7 +128,7 @@ class ABSADataset:
                 ))
         sent_info = pd.DataFrame(sent_info, columns=['text_id', 'sent_id', 'sent', 'start', 'end'])
         setattr(self, 'sents_', sent_info)
-        print('"sents_" attribute created')
+        # print('"sents_" attribute created')
         return sent_info
 
     def crf_bio(self):
@@ -207,7 +171,7 @@ class ABSADataset:
 
         parsed['BIO'] = pd.Series(bio, token_idx)
         setattr(self, 'bio_', parsed)
-        print('"bio_ attribute created')
+        # print('"bio_ attribute created')
         return parsed
 
     def _find_aspect_sent(self,
@@ -221,7 +185,7 @@ class ABSADataset:
             aspect_sents.append(sent_id)
         aspects['sent_id'] = aspect_sents
         setattr(self, 'parsed_aspects_', aspects)
-        print('"parsed_aspects_" attribute created')
+        # print('"parsed_aspects_" attribute created')
         return aspects
 
     def parsed_aspects(self):
@@ -236,7 +200,7 @@ class ABSADataset:
         print("Adding sentence text to aspects...")
         merged = pd.merge(parsed_aspects, sents[['text_id', 'sent_id', 'sent']])
         setattr(self, 'ats_input_', merged)
-        print('"ats_input_" attribute created')
+        # print('"ats_input_" attribute created')
         return merged
 
     def ats_input(self):
