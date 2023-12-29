@@ -1,0 +1,100 @@
+dataset:
+  train:
+    reviews: './data/reviews_train.csv'
+    aspects: './data/aspects_train.csv'
+    categories: './data/categories_train.csv'
+    preprocessed:
+      parsed: './data/preprocessed/parsed_train.csv'
+      sents: './data/preprocessed/sents_train.csv'
+      parsed_aspects: './data/preprocessed/parsed_aspects_train.csv'
+      bio: './data/preprocessed/bio_train.csv'
+      ats_input: './data/preprocessed/ats_input_train.csv'
+  dev:
+    reviews: './data/reviews_dev.csv'
+    aspects: './data/aspects_dev.csv'
+    categories: './data/categories_dev.csv'
+    preprocessed:
+      parsed: './data/preprocessed/parsed_dev.csv'
+      sents: './data/preprocessed/sents_dev.csv'
+      parsed_aspects: './data/preprocessed/parsed_aspects_dev.csv'
+      bio: './data/preprocessed/bio_dev.csv'
+      ats_input: './data/preprocessed/ats_input_dev.csv'
+  test:
+    reviews: './data/reviews_dev.csv'
+    preprocessed:
+      parsed: './data/preprocessed/parsed_dev.csv'
+
+components:
+  crf:
+    class_name: CRFModel
+    default_params:
+      algorithm: 'lbfgs'
+      max_iterations: 100
+      all_possible_transitions: True
+      c1: 0.3
+      c2: 0.2
+  bert_ats:
+    class_name: ATSBert
+    default_params:
+      model_name: "MonoHime/rubert-base-cased-sentiment-new"
+      sentiment_map:
+        NEGATIVE: 'negative'
+        NEUTRAL: 'neutral'
+        POSITIVE: 'positive'
+      model_type: pipeline
+      prompt_type: 1
+      lang: ru
+  bert_ats_finetuned:
+    class_name: ATSBert
+    default_params:
+      model_name: "Bareubara/absa-bert-model"
+      model_type: model
+      prompt_type: 1
+      lang: ru
+      sentiment_map:
+        0: both,
+        1: negative
+        2: neutral
+        3: positive
+  algo_acs:
+    class_name: ACSAlgo
+    default_params:
+      model_name: "MonoHime/rubert-base-cased-sentiment-new"
+
+checkpoints:
+  crf:
+    path: './checkpoints/crf_weights_ud+positions.sav'
+  bert_ats:
+    model_name: "MonoHime/rubert-base-cased-sentiment-new"
+    sentiment_map:
+      NEGATIVE: 'negative'
+      NEUTRAL: 'neutral'
+      POSITIVE: 'positive'
+    model_type: pipeline
+    prompt_type: 1
+    lang: ru
+  bert_ats_finetuned:
+    model_name: "Bareubara/absa-bert-model"
+    model_type: model
+    prompt_type: 1
+    lang: ru
+    sentiment_map:
+      0: both,
+      1: negative
+      2: neutral
+      3: positive
+  algo_acs:
+    categories:
+      - Food
+      - Interior
+      - Price
+      - Service
+      - Whole
+
+pipelines:
+  atc+ats+acs:
+    class_name: ThreeShotPipeline
+    components:
+      - crf
+      - bert_ats_finetuned
+      - algo_acs
