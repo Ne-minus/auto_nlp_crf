@@ -158,7 +158,7 @@ if __name__ == '__main__':
 
     pred_cats = input('Path to predicted categories: ')
     if not pred_cats:
-        pred_cats = './data/res/categories_dev.csv'
+        pred_cats = './data/res/categories_pred.csv'
 
     evaluation = Evaluator(gold_aspects, gold_cats)
 
@@ -180,7 +180,7 @@ if __name__ == '__main__':
         Mention sentiment accuracy on partial matches:{sentiment_part}
         ''')
     
-    # print(f'Overall accuracy by categories: {evaluation.sentiment_cats(pred_cats)}')
+    print(f'Overall accuracy by categories: {evaluation.sentiment_cats(pred_cats)}')
 
           
 

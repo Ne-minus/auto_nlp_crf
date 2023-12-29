@@ -6,6 +6,7 @@ from abstract_pipelines import ABSAPipeline
 from preprocessing import ABSADataset
 from crf_model import CRFModel
 from ats_bert_model import ATSBert
+from acs_model import ACSAlgo
 
 
 class ThreeShotPipeline:
@@ -61,6 +62,9 @@ class ThreeShotPipeline:
 
         aspects = test_dataset.ats_input()[['text_id', 'category', 'aspect', 'start', 'end', 'sentiment']]
         aspects.to_csv(Path(res_folder, f'aspects_pred.csv'), sep='\t', header=False, index=False)
+
+        categories = test_dataset.categories
+        categories.to_csv(Path(res_folder, f'categories_pred.csv'), sep='\t', header=False, index=False)
 
 
 if __name__ == '__main__':
