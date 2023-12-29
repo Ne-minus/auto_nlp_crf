@@ -1,4 +1,4 @@
-from collections import defaultdict
+from pipelines import *
 
 
 class Evaluator:
@@ -144,21 +144,39 @@ class Evaluator:
 
 
 if __name__ == '__main__':
+    import yaml
+
+    with open('configs.yml', 'r') as file:
+        config = yaml.safe_load(file)
+
+    pipe = input(f'Select pipeline ({list(config["pipelines"].keys())}): ')
+    if pipe not in config["pipelines"].keys():
+        raise ValueError('Unknown pipeline')
+
+    pl_config = config['pipelines'][pipe]
+    components_config = {comp: config for comp, config in config['components'].items() if
+                         comp in pl_config['components']}
+    checkpoints_config = config['checkpoints']
+    pipeline = globals()[pl_config['class_name']].from_checkpoints(components_config, checkpoints_config)
+
+    test_path = input('Enter path to test_data: ')
+    test_dataset = ABSADataset({'test': {'reviews': test_path}}, 'test')
+    res_dataset = pipeline.predict(test_dataset)
+
+    res_folder = input('Enter path to result folder (if None the default will be ./data/res/')
+    if not res_folder:
+        res_folder = './data/res/'
+    pipeline.write_res_files(res_dataset, res_folder)
+    pred_aspects = Path(res_folder, 'aspects_pred.csv')
+    pred_cats = Path(res_folder, 'categories_pred.csv')
+
     gold_aspects = input('Path to gold aspects: ')
     if not gold_aspects:
         gold_aspects = './data/aspects_dev.csv'
 
-    pred_aspects = input('Path to predicted aspects: ')
-    if not pred_aspects:
-        pred_aspects = './data/res/aspects_pred.csv'
-
     gold_cats = input('Path to gold categories: ')
     if not gold_cats:
         gold_cats = './data/categories_dev.csv'
-
-    pred_cats = input('Path to predicted categories: ')
-    if not pred_cats:
-        pred_cats = './data/res/categories_pred.csv'
 
     evaluation = Evaluator(gold_aspects, gold_cats)
 
